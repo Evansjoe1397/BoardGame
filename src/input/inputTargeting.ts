@@ -65,7 +65,8 @@ import {
   applyShieldingEffectToUnit,
   applyShimmeringCloakSelection,
   activateCoreMagnet,
-  activateBulwarkCoreMagnet
+  activateBulwarkCoreMagnet,
+  executeGhostbladeTeleport
 } from '../engine/abilities.ts';
 import {
   createBuilding,
@@ -411,33 +412,16 @@ export function handleGhostbladeTeleportTargetClick(hit: HitObject): void {
     return;
   }
 
+  // Visual cues live in the input layer (they are local-only animation).
   const startPos = gridToWorld(caster.x, caster.z);
   const target = fromSquareKey(squareKey);
   const targetPos = gridToWorld(target.x, target.z);
   playTeleportBlinkAt(startPos, caster.owner);
   playTeleportBlinkAt(targetPos, caster.owner);
 
-  caster.x = target.x;
-  caster.z = target.z;
-  caster.hasMoved = true;
-  caster.ghostbladeTeleportCooldown = 5;
-  currentPlayer.energy -= 10;
+  // Game-state mutation lives in the engine.
+  executeGhostbladeTeleport(caster, squareKey);
 
-  const affected = state.units.filter((unit) => {
-    if (unit.owner === caster.owner) {
-      return false;
-    }
-    return getDistance(target.x, target.z, unit.x, unit.z) <= 1;
-  });
-  const ghostbladeDamage = getUnitCurrentAttackDamage(caster);
-  for (const unit of affected) {
-    applyUnitAttack(caster, unit, {
-      damageType: DAMAGE_TYPES.ATTACK,
-      damageAmount: ghostbladeDamage,
-      skipCoreMagnetRedirect: true
-    });
-  }
-  addLog(`${caster.owner} Ghostblade teleported to ${squareKey} and dealt ${ghostbladeDamage} AoE damage.`);
   state.mode = 'unit_selected';
   state.ghostbladeTeleportCasterId = null;
   syncBoardVisualState();

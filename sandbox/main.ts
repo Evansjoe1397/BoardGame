@@ -33,7 +33,11 @@ const SPRINT_SPEED = 12;
 const JUMP_SPEED = 9;
 const MOUSE_SENS = 0.0022;
 const PITCH_LIMIT = Math.PI / 2 - 0.05;
-const GRASS_COUNT = 13000;
+// Embed props slightly into the surface so they don't float over the
+// linearly-interpolated icosahedron faces. The exact noise (surfaceRadius)
+// is what placement uses, but the rendered triangles between vertices sag
+// below it; without an offset, small objects appear to hover.
+const PROP_EMBED = 0.4;
 
 const MODEL_BASE = '/sandbox/models/';
 
@@ -158,128 +162,9 @@ function surfaceRadius(unitDir: THREE.Vector3): number {
   scene.add(planet);
 }
 
-// --- grass instancing ------------------------------------------------------
-
-/**
- * Build a grass-tuft geometry: a small fan of thin blade triangles arranged
- * radially around the local origin. Each blade is a single triangle pointing
- * up and slightly outward — looks like a clump of grass with proper volume,
- * unlike crossed quads which read as paperish.
- */
-function makeGrassTuft(): THREE.BufferGeometry {
-  const verts: number[] = [];
-  const NumBlades = 7;
-  const baseR = 0.04;        // how far from centre each blade's base sits
-  const tipOffset = 0.08;    // outward lean of the blade tip
-  const halfBase = 0.012;    // half-width of blade at base
-  const Hmin = 0.22, Hmax = 0.42;
-
-  // deterministic per-blade jitter so all instances share the same tuft shape
-  let seed = 9173;
-  const rand = () => {
-    seed = (seed * 16807) % 2147483647;
-    return seed / 2147483647;
-  };
-
-  for (let i = 0; i < NumBlades; i++) {
-    const a = (i / NumBlades) * Math.PI * 2 + rand() * 0.4;
-    const cs = Math.cos(a), sn = Math.sin(a);
-
-    // base centre
-    const bcx = cs * baseR;
-    const bcz = sn * baseR;
-
-    // base perpendicular (cross with up)
-    const px = -sn * halfBase;
-    const pz =  cs * halfBase;
-
-    // tip leans outward + small forward kink for character
-    const tipAngleJitter = a + (rand() - 0.5) * 0.4;
-    const tcs = Math.cos(tipAngleJitter), tsn = Math.sin(tipAngleJitter);
-    const tx = bcx + tcs * tipOffset;
-    const tz = bcz + tsn * tipOffset;
-    const ty = Hmin + rand() * (Hmax - Hmin);
-
-    // 1 triangle per blade — rendered DoubleSide
-    verts.push(
-      bcx - px, 0, bcz - pz,
-      bcx + px, 0, bcz + pz,
-      tx,       ty, tz,
-    );
-  }
-
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-  g.computeVertexNormals();
-  return g;
-}
-
-{
-  const bladeGeom = makeGrassTuft();
-
-  const bladeMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    roughness: 1.0,
-    side: THREE.DoubleSide,
-    metalness: 0,
-  });
-  const grass = new THREE.InstancedMesh(bladeGeom, bladeMat, GRASS_COUNT);
-  // disable frustum culling: the bbox is local to the tuft mesh and we have
-  // instances all over the planet, so the renderer must consider every frame.
-  grass.frustumCulled = false;
-
-  const m = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const upY = new THREE.Vector3(0, 1, 0);
-  const dir = new THREE.Vector3();
-  const pos = new THREE.Vector3();
-  const scl = new THREE.Vector3();
-  const colorTmp = new THREE.Color();
-  const cBase = new THREE.Color(0x5d8a32);
-  const cTop  = new THREE.Color(0x9bc056);
-  const cDry  = new THREE.Color(0xa18d3e);
-
-  for (let i = 0; i < GRASS_COUNT; i++) {
-    dir.randomDirection();
-    const r = surfaceRadius(dir);
-
-    // skip on rocky highlands
-    const altNorm = (r - PLANET_RADIUS) / TERRAIN_AMPLITUDE;
-    if (altNorm > 0.45) {
-      m.makeScale(0, 0, 0);
-      grass.setMatrixAt(i, m);
-      continue;
-    }
-
-    pos.copy(dir).multiplyScalar(r - 0.02);
-    q.setFromUnitVectors(upY, dir);
-    const yawQ = new THREE.Quaternion().setFromAxisAngle(dir, Math.random() * Math.PI * 2);
-    q.multiply(yawQ);
-    const sH = 0.7 + Math.random() * 1.1;
-    const sW = 0.85 + Math.random() * 0.6;
-    scl.set(sW, sH, sW);
-    m.compose(pos, q, scl);
-    grass.setMatrixAt(i, m);
-
-    // green palette with occasional dry tuft
-    if (Math.random() < 0.06) {
-      colorTmp.copy(cDry);
-    } else {
-      colorTmp.copy(cBase).lerp(cTop, Math.random());
-    }
-    grass.setColorAt(i, colorTmp);
-  }
-  grass.instanceMatrix.needsUpdate = true;
-  if (grass.instanceColor) grass.instanceColor.needsUpdate = true;
-  scene.add(grass);
-}
+// (grass removed — visuals weren't selling it; planet vertex colors carry the surface)
 
 // --- shatter system --------------------------------------------------------
-
-interface Shatterable {
-  group: THREE.Object3D;
-  meshes: THREE.Mesh[];
-}
 
 interface Fragment {
   mesh: THREE.Mesh;
@@ -287,6 +172,17 @@ interface Fragment {
   angVel: THREE.Vector3;
   life: number;
   maxLife: number;
+}
+
+interface Shatterable {
+  // Logical reference to a single placed prop.
+  // Backing storage is a set of InstancedMesh slots (one per sub-mesh of the prop template).
+  template: PropTemplate;
+  slot: number;
+  // World matrix of each sub-mesh at placement time, used to extract world-space
+  // triangle positions when shattering.
+  subWorlds: THREE.Matrix4[];
+  alive: boolean;
 }
 
 const shatterables: Shatterable[] = [];
@@ -297,15 +193,17 @@ const FRAG_FADE = 0.7;
 const FRAG_MAX_PER_SHATTER = 600;
 
 function shatter(target: Shatterable, hitPoint: THREE.Vector3): void {
+  if (!target.alive) return;
   type Tri = { a: THREE.Vector3; b: THREE.Vector3; c: THREE.Vector3; mat: THREE.Material };
   const tris: Tri[] = [];
+  const tpl = target.template;
 
-  for (const mesh of target.meshes) {
-    mesh.updateMatrixWorld(true);
-    const geom = mesh.geometry as THREE.BufferGeometry;
+  for (let i = 0; i < tpl.subs.length; i++) {
+    const sub = tpl.subs[i];
+    const m = target.subWorlds[i];
+    const geom = sub.geometry;
     const pos = geom.attributes.position as THREE.BufferAttribute;
     const idx = geom.index;
-    const m = mesh.matrixWorld;
     const triCount = idx ? idx.count / 3 : pos.count / 3;
     for (let t = 0; t < triCount; t++) {
       const ai = idx ? idx.getX(t * 3)     : t * 3;
@@ -314,11 +212,17 @@ function shatter(target: Shatterable, hitPoint: THREE.Vector3): void {
       const a = new THREE.Vector3().fromBufferAttribute(pos, ai).applyMatrix4(m);
       const b = new THREE.Vector3().fromBufferAttribute(pos, bi).applyMatrix4(m);
       const c = new THREE.Vector3().fromBufferAttribute(pos, ci).applyMatrix4(m);
-      tris.push({ a, b, c, mat: mesh.material as THREE.Material });
+      tris.push({ a, b, c, mat: sub.material });
     }
   }
 
-  scene.remove(target.group);
+  // hide this slot in every InstancedMesh of the template
+  const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (const ins of tpl.instancedMeshes) {
+    ins.setMatrixAt(target.slot, zero);
+    ins.instanceMatrix.needsUpdate = true;
+  }
+  target.alive = false;
   const idx = shatterables.indexOf(target);
   if (idx >= 0) shatterables.splice(idx, 1);
 
@@ -416,9 +320,44 @@ draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
 loader.setDRACOLoader(draco);
 loader.setMeshoptDecoder(MeshoptDecoder);
 
-interface NormalizedProp {
-  template: THREE.Group; // wrapper, scaled and centred so base sits at y=0
-  source: string;
+/**
+ * Bounding box from mesh geometry only (skips bones/empties/lights). Required
+ * for skinned models where Object3D ancestors can otherwise inflate the bbox.
+ */
+function meshOnlyBbox(root: THREE.Object3D): THREE.Box3 {
+  const result = new THREE.Box3();
+  result.makeEmpty();
+  root.updateMatrixWorld(true);
+  const tmp = new THREE.Box3();
+  root.traverse(c => {
+    const m = c as THREE.Mesh;
+    if (m.isMesh && m.geometry) {
+      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+      const gb = m.geometry.boundingBox;
+      if (gb) { tmp.copy(gb).applyMatrix4(m.matrixWorld); result.union(tmp); }
+    }
+  });
+  return result;
+}
+
+interface PropSubMesh {
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+  /**
+   * Mesh transform relative to the prop root, with normalisation baked in
+   * (uniform scale to targetSize + recenter so base sits at y=0). Multiplying
+   * this by a placement matrix yields the world matrix for the sub-mesh.
+   */
+  localMatrix: THREE.Matrix4;
+}
+
+interface PropTemplate {
+  templateId: string;       // e.g. "tree_0"
+  slug: string;
+  subs: PropSubMesh[];
+  capacity: number;
+  instancedMeshes: THREE.InstancedMesh[]; // one per sub-mesh
+  nextSlot: number;
 }
 
 interface ScatterPlan { slug: string; count: number; targetSize: number }
@@ -432,12 +371,10 @@ const SCATTER: ScatterPlan[] = [
   { slug: 'fox',      count: 8,  targetSize: 1.0 },
 ];
 
-/**
- * Walk a loaded glb scene; for each leaf mesh, find its top-level ancestor
- * directly under the scene root. Return each unique top-level subtree —
- * these are treated as independent "props" so packs of objects are scattered
- * individually instead of as one clump.
- */
+const propTemplates: PropTemplate[] = [];
+// Reverse lookup: from an InstancedMesh hit, find the owning template + sub-index.
+const meshToTemplate: Map<THREE.InstancedMesh, { template: PropTemplate; subIdx: number }> = new Map();
+
 function collectTopLevelProps(root: THREE.Object3D): THREE.Object3D[] {
   const meshes: THREE.Mesh[] = [];
   root.traverse(c => { if ((c as THREE.Mesh).isMesh) meshes.push(c as THREE.Mesh); });
@@ -451,74 +388,131 @@ function collectTopLevelProps(root: THREE.Object3D): THREE.Object3D[] {
   return Array.from(tops);
 }
 
-function normalizeProp(node: THREE.Object3D, targetSize: number): THREE.Group {
-  const wrap = new THREE.Group();
-  const inst = node.clone(true);
-  inst.position.set(0, 0, 0);
-  wrap.add(inst);
-  wrap.updateMatrixWorld(true);
-  const bbox = new THREE.Box3().setFromObject(wrap);
+/**
+ * Build a PropTemplate from a top-level subtree of a loaded glb. Each child
+ * mesh becomes a PropSubMesh sharing geometry+material. An InstancedMesh
+ * (capacity = capacity) is created per sub-mesh and added to the scene.
+ *
+ * Memory savings: rather than cloning the prop N times (N copies of geometry,
+ * materials, mesh structs, draw calls), each sub-mesh draws all instances in
+ * a single call from one shared GPU buffer.
+ */
+function buildTemplate(slug: string, top: THREE.Object3D, targetSize: number, capacity: number, variantIdx: number): PropTemplate | null {
+  // Detach into a clean temporary parent at origin so matrixWorld is in a
+  // predictable local frame.
+  const tmpRoot = new THREE.Group();
+  tmpRoot.add(top);
+  tmpRoot.updateMatrixWorld(true);
+
+  const bbox = meshOnlyBbox(tmpRoot);
+  if (bbox.isEmpty()) return null;
   const size = new THREE.Vector3(); bbox.getSize(size);
   const center = new THREE.Vector3(); bbox.getCenter(center);
   const maxDim = Math.max(size.x, size.y, size.z) || 1;
-  inst.position.set(-center.x, -bbox.min.y, -center.z);
-  wrap.scale.setScalar(targetSize / maxDim);
-  return wrap;
+  const scale = targetSize / maxDim;
+
+  // Normalisation: shift so xz centred & base at y=0, then scale uniformly.
+  // M_norm = S * T(-center.x, -bbox.min.y, -center.z)
+  const normMatrix = new THREE.Matrix4().makeScale(scale, scale, scale);
+  normMatrix.multiply(new THREE.Matrix4().makeTranslation(-center.x, -bbox.min.y, -center.z));
+
+  const subs: PropSubMesh[] = [];
+  top.traverse(c => {
+    const mesh = c as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.geometry) return;
+    const meshLocal = new THREE.Matrix4().copy(mesh.matrixWorld); // in tmpRoot frame
+    const finalLocal = new THREE.Matrix4().multiplyMatrices(normMatrix, meshLocal);
+    subs.push({
+      geometry: mesh.geometry,
+      material: Array.isArray(mesh.material) ? mesh.material[0] : mesh.material as THREE.Material,
+      localMatrix: finalLocal,
+    });
+  });
+
+  if (subs.length === 0) return null;
+
+  const tpl: PropTemplate = {
+    templateId: `${slug}_${variantIdx}`,
+    slug,
+    subs,
+    capacity,
+    instancedMeshes: [],
+    nextSlot: 0,
+  };
+
+  const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (let i = 0; i < subs.length; i++) {
+    const sub = subs[i];
+    const ins = new THREE.InstancedMesh(sub.geometry, sub.material, capacity);
+    ins.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    ins.frustumCulled = false; // instances span the whole planet
+    for (let s = 0; s < capacity; s++) ins.setMatrixAt(s, zero);
+    scene.add(ins);
+    tpl.instancedMeshes.push(ins);
+    meshToTemplate.set(ins, { template: tpl, subIdx: i });
+  }
+  return tpl;
 }
 
-async function loadProps(slug: string, targetSize: number): Promise<NormalizedProp[]> {
+async function loadAndRegisterTemplates(slug: string, targetSize: number, totalCount: number): Promise<void> {
   const url = `${MODEL_BASE}${slug}.glb`;
   let gltf;
   try { gltf = await loader.loadAsync(url); }
-  catch (e) { console.warn(`[load] missing ${slug}:`, e); return []; }
+  catch (e) { console.warn(`[load] missing ${slug}:`, e); return; }
 
   const tops = collectTopLevelProps(gltf.scene);
-  const out: NormalizedProp[] = [];
-  for (const top of tops) {
-    out.push({ template: normalizeProp(top, targetSize), source: slug });
+  if (tops.length === 0) return;
+  const perVariant = Math.ceil(totalCount / tops.length);
+
+  let registered = 0;
+  for (let i = 0; i < tops.length; i++) {
+    const tpl = buildTemplate(slug, tops[i], targetSize, perVariant, i);
+    if (tpl) { propTemplates.push(tpl); registered++; }
   }
-  console.log(`[load] ${slug}: ${tops.length} prop variant(s)`);
-  return out;
+  console.log(`[load] ${slug}: ${registered}/${tops.length} variant(s) registered, capacity=${perVariant} each`);
 }
 
-function placeProp(template: THREE.Group, dir: THREE.Vector3): void {
-  const inst = template.clone(true);
-  inst.traverse(c => {
-    const mesh = c as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.material) return;
-    if (Array.isArray(mesh.material)) {
-      mesh.material = mesh.material.map(mat => mat.clone());
-    } else {
-      mesh.material = (mesh.material as THREE.Material).clone();
-    }
-  });
+function placeProp(slug: string, dir: THREE.Vector3): void {
+  // pick a template variant for this slug that still has room
+  const candidates = propTemplates.filter(t => t.slug === slug && t.nextSlot < t.capacity);
+  if (candidates.length === 0) return;
+  const tpl = candidates[Math.floor(Math.random() * candidates.length)];
+  const slot = tpl.nextSlot++;
 
   const r = surfaceRadius(dir);
-  inst.position.copy(dir).multiplyScalar(r);
+  const pos = dir.clone().multiplyScalar(r);
   const upY = new THREE.Vector3(0, 1, 0);
-  const qOrient = new THREE.Quaternion().setFromUnitVectors(upY, dir);
-  inst.quaternion.copy(qOrient);
-  inst.rotateY(Math.random() * Math.PI * 2);
+  const orient = new THREE.Quaternion().setFromUnitVectors(upY, dir);
+  const yawQ = new THREE.Quaternion().setFromAxisAngle(dir, Math.random() * Math.PI * 2);
+  orient.multiply(yawQ);
+  // placement = T(pos) * R(orient); scale stays in localMatrix
+  const placement = new THREE.Matrix4().compose(pos, orient, new THREE.Vector3(1, 1, 1));
 
-  scene.add(inst);
-
-  const meshes: THREE.Mesh[] = [];
-  inst.traverse(c => { if ((c as THREE.Mesh).isMesh) meshes.push(c as THREE.Mesh); });
-  if (meshes.length > 0) shatterables.push({ group: inst, meshes });
+  const subWorlds: THREE.Matrix4[] = [];
+  for (let i = 0; i < tpl.subs.length; i++) {
+    const sub = tpl.subs[i];
+    const world = new THREE.Matrix4().multiplyMatrices(placement, sub.localMatrix);
+    tpl.instancedMeshes[i].setMatrixAt(slot, world);
+    tpl.instancedMeshes[i].instanceMatrix.needsUpdate = true;
+    subWorlds.push(world);
+  }
+  shatterables.push({ template: tpl, slot, subWorlds, alive: true });
 }
 
 async function scatterProps(): Promise<void> {
-  const pools = await Promise.all(
-    SCATTER.map(plan => loadProps(plan.slug, plan.targetSize).then(p => ({ plan, pool: p })))
+  await Promise.all(
+    SCATTER.map(plan => loadAndRegisterTemplates(plan.slug, plan.targetSize, plan.count))
   );
-  for (const { plan, pool } of pools) {
-    if (pool.length === 0) continue;
+  for (const plan of SCATTER) {
     for (let i = 0; i < plan.count; i++) {
-      const tpl = pool[Math.floor(Math.random() * pool.length)];
       const dir = new THREE.Vector3().randomDirection();
-      placeProp(tpl.template, dir);
+      placeProp(plan.slug, dir);
     }
   }
+}
+
+function getAllPropInstancedMeshes(): THREE.InstancedMesh[] {
+  return [...meshToTemplate.keys()];
 }
 
 // --- weapons ---------------------------------------------------------------
@@ -565,30 +559,6 @@ interface ActiveWeapon {
 
 const weaponPool: ActiveWeapon[] = [];
 let activeIndex = 0;
-
-/**
- * bbox using only Mesh geometry — bones/empties/lights inside skinned glbs
- * (e.g. the animated Colt) can otherwise blow up the bbox and make the
- * normalised scale absurdly small or large.
- */
-function meshOnlyBbox(root: THREE.Object3D): THREE.Box3 {
-  const result = new THREE.Box3();
-  result.makeEmpty();
-  root.updateMatrixWorld(true);
-  const tmp = new THREE.Box3();
-  root.traverse(c => {
-    const m = c as THREE.Mesh;
-    if (m.isMesh && m.geometry) {
-      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
-      const gb = m.geometry.boundingBox;
-      if (gb) {
-        tmp.copy(gb).applyMatrix4(m.matrixWorld);
-        result.union(tmp);
-      }
-    }
-  });
-  return result;
-}
 
 async function loadWeapon(cfg: WeaponConfig): Promise<ActiveWeapon | null> {
   const url = `${MODEL_BASE}${cfg.slug}.glb`;
@@ -706,21 +676,34 @@ function attack(): void {
     if (w.config.hasMuzzleFlash) spawnMuzzleFlash();
     raycaster.set(origin, dir);
     raycaster.far = w.config.range;
-    const allMeshes: THREE.Mesh[] = [];
-    for (const s of shatterables) allMeshes.push(...s.meshes);
-    const hits = raycaster.intersectObjects(allMeshes, false);
+    const hits = raycaster.intersectObjects(getAllPropInstancedMeshes(), false);
     if (hits.length > 0) {
-      const target = shatterables.find(s => s.meshes.includes(hits[0].object as THREE.Mesh));
-      if (target) shatter(target, hits[0].point);
+      const hit = hits[0];
+      const info = meshToTemplate.get(hit.object as THREE.InstancedMesh);
+      const slot = hit.instanceId;
+      if (info && slot != null) {
+        const target = shatterables.find(s => s.template === info.template && s.slot === slot && s.alive);
+        if (target) shatter(target, hit.point);
+      }
     }
   } else {
+    // Melee: scan alive instances; find the closest one whose centre is in
+    // a forward 60° cone within range.
     let best: Shatterable | null = null;
     let bestDist = Infinity;
     const bestPoint = new THREE.Vector3();
     const tmpC = new THREE.Vector3();
     const tmpD = new THREE.Vector3();
+    const subBbox = new THREE.Box3();
     for (const s of shatterables) {
-      new THREE.Box3().setFromObject(s.group).getCenter(tmpC);
+      if (!s.alive) continue;
+      // approximate centre = average of subWorlds positions
+      tmpC.set(0, 0, 0);
+      for (const m of s.subWorlds) {
+        const p = new THREE.Vector3().setFromMatrixPosition(m);
+        tmpC.add(p);
+      }
+      tmpC.divideScalar(s.subWorlds.length);
       tmpD.copy(tmpC).sub(origin);
       const dist = tmpD.length();
       if (dist > w.config.range) continue;
@@ -731,6 +714,7 @@ function attack(): void {
       }
     }
     if (best) shatter(best, bestPoint);
+    void subBbox;
   }
 }
 

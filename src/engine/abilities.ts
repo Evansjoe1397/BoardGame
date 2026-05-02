@@ -23,6 +23,11 @@ import {
 } from './unitStats.ts';
 import { getCardEnergyCost } from './cards.ts';
 import { setEnergy, setSupply } from './playerResources.ts';
+import { applyUnitAttack } from './combat.ts';
+import { getUnitCurrentAttackDamage } from './unitStats.ts';
+import { fromSquareKey } from '../utils.ts';
+import { DAMAGE_TYPES } from '../constants.ts';
+import { emit } from '../shared/events.ts';
 
 // ---------------------------------------------------------------------------
 // Tactical Dash (Pawn Drone)
@@ -458,4 +463,44 @@ export function registerAbilityDeps(deps: AbilityDeps): void {
   if (deps.applyShieldToUnit) applyShieldToUnit = deps.applyShieldToUnit;
   if (deps.addShimmeringCloak) addShimmeringCloak = deps.addShimmeringCloak;
   if (deps.applyProcessEchoPlayResult) applyProcessEchoPlayResult = deps.applyProcessEchoPlayResult;
+}
+
+// ---------------------------------------------------------------------------
+// Ghostblade teleport — extracted from inputTargeting so the input layer no
+// longer mutates unit position / cooldown / player energy directly.
+// ---------------------------------------------------------------------------
+
+export function executeGhostbladeTeleport(caster: Unit, targetSquareKey: string): void {
+  const target = fromSquareKey(targetSquareKey);
+  const fromX = caster.x;
+  const fromZ = caster.z;
+  caster.x = target.x;
+  caster.z = target.z;
+  caster.hasMoved = true;
+  caster.ghostbladeTeleportCooldown = 5;
+  const player = state.players[caster.owner];
+  setEnergy(player, player.energy - 10);
+  emit({
+    type: 'UNIT_MOVED',
+    unitId: caster.id,
+    fromX,
+    fromZ,
+    toX: target.x,
+    toZ: target.z,
+  });
+
+  const ghostbladeDamage = getUnitCurrentAttackDamage(caster);
+  const affected = state.units.filter(
+    (unit) =>
+      unit.owner !== caster.owner &&
+      getDistance(target.x, target.z, unit.x, unit.z) <= 1
+  );
+  for (const unit of affected) {
+    applyUnitAttack(caster, unit, {
+      damageType: DAMAGE_TYPES.ATTACK,
+      damageAmount: ghostbladeDamage,
+      skipCoreMagnetRedirect: true,
+    });
+  }
+  addLog(`${caster.owner} Ghostblade teleported to ${targetSquareKey} and dealt ${ghostbladeDamage} AoE damage.`);
 }

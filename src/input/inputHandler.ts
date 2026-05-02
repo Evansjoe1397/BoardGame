@@ -30,7 +30,7 @@ interface HitUserData {
 
 type HitObject = THREE.Object3D & { userData: HitUserData };
 
-import { applyUnitAttack, applyBaseAttack, summonUnit } from '../engine/combat.ts';
+import { applyUnitAttack, applyBaseAttack, summonUnit, executeUnitMove } from '../engine/combat.ts';
 import {
   getUnitCurrentMoveRange,
   getUnitCurrentAttackRange,
@@ -607,23 +607,9 @@ export function handleSquareClick(squareKey: string): void {
     return;
   }
 
-  const fromX = selectedUnit.x;
-  const fromZ = selectedUnit.z;
-  selectedUnit.x = target.x;
-  selectedUnit.z = target.z;
-  selectedUnit.movementUsedThisTurn = movementUsed + distance;
-  selectedUnit.hasMoved = selectedUnit.movementUsedThisTurn > 0;
-  addLog(`${selectedUnit.owner} ${selectedUnit.unitName} moved to ${squareKey}.`);
-  // Emit UNIT_MOVED so the eventApplier triggers the walk animation here AND
-  // — once the snapshot+events are forwarded — on the other client too.
-  emit({
-    type: 'UNIT_MOVED',
-    unitId: selectedUnit.id,
-    fromX,
-    fromZ,
-    toX: target.x,
-    toZ: target.z,
-  });
+  // Game-state mutation lives in the engine; input handler only validates
+  // and dispatches the move.
+  executeUnitMove(selectedUnit, target.x, target.z);
 
   const tangoReactorAtDestination = getTangoReactorForPosition(selectedUnit, target.x, target.z);
   if (tangoReactorAtDestination) {

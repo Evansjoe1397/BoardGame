@@ -171,6 +171,30 @@ export function summonUnit(owner: PlayerId, squareKey: string, unitTypeId: UnitT
 }
 
 // ---------------------------------------------------------------------------
+// Execute unit move
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a unit movement that has already been validated by the caller (range,
+ * remaining-movement, walkability). Mutates state and emits UNIT_MOVED.
+ *
+ * Validation lives in the input layer because it depends on UI-mode context;
+ * the mutation lives here so input handlers do not write to game state
+ * directly.
+ */
+export function executeUnitMove(unit: Unit, targetX: number, targetZ: number): void {
+  const fromX = unit.x;
+  const fromZ = unit.z;
+  const distance = getDistance(fromX, fromZ, targetX, targetZ);
+  unit.x = targetX;
+  unit.z = targetZ;
+  unit.movementUsedThisTurn = (unit.movementUsedThisTurn ?? 0) + distance;
+  unit.hasMoved = unit.movementUsedThisTurn > 0;
+  addLog(`${unit.owner} ${unit.unitName} moved to ${toSquareKey(targetX, targetZ)}.`);
+  emit({ type: 'UNIT_MOVED', unitId: unit.id, fromX, fromZ, toX: targetX, toZ: targetZ });
+}
+
+// ---------------------------------------------------------------------------
 // Apply unit attack
 // ---------------------------------------------------------------------------
 
