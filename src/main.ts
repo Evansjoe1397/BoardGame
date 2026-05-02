@@ -38,7 +38,7 @@ import { removeUnitShield, applyShieldToUnit, consumeSystemShockFollowUp } from 
 import { addShimmeringCloak } from './engine/unitStats.ts';
 import { getUnitWorldPosition } from './three/effects.ts';
 import { drawCards, startGame, applyProcessEchoPlayResult } from './engine/turnManager.ts';
-import { endTurn } from './engine/turnManager.ts';
+import { dispatch } from './actionDispatcher.ts';
 
 // Engine effect callbacks are wired to event emission (no direct Three.js
 // access from the engine). Real effects run from src/eventApplier.ts when
@@ -101,7 +101,7 @@ async function init() {
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('resize', onResize);
-  endTurnBtn.addEventListener('click', () => endTurn());
+  endTurnBtn.addEventListener('click', () => dispatch({ type: 'END_TURN' }));
   renderer.setAnimationLoop(animate);
 
   startGame();

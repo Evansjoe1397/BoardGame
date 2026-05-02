@@ -47,7 +47,7 @@ import {
 } from '../engine/unitStats.ts';
 import { hasBallisticStatus } from '../engine/artillery.ts';
 import { getCardEnergyCost } from '../engine/cards.ts';
-import { endTurn } from '../engine/turnManager.ts';
+import { dispatch } from '../actionDispatcher.ts';
 import { startUnitMoveAnimation } from '../three/animation.ts';
 
 import {
@@ -633,7 +633,7 @@ export function handleSquareClick(squareKey: string): void {
 export function onKeyDown(event: KeyboardEvent): void {
   if (event.code === 'Space') {
     event.preventDefault();
-    endTurn();
+    dispatch({ type: 'END_TURN' });
     return;
   }
 
