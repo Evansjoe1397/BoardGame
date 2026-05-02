@@ -277,3 +277,14 @@ export function leaveRoom(): void {
 export function sendAction(action: Action): boolean {
   return socket.send({ type: 'action', action } satisfies ClientMessage);
 }
+
+/**
+ * Trust-the-actor state relay. After the acting client locally runs an engine
+ * function (one that hasn't yet been migrated through the reducer / network
+ * boundary), the new state — and the events emitted during that mutation —
+ * are shipped to the server, which replaces its room copy and relays both
+ * to the other client.
+ */
+export function pushState(state: unknown, events: GameEvent[]): boolean {
+  return socket.send({ type: 'state_push', state, events } satisfies ClientMessage);
+}

@@ -31,7 +31,7 @@ import {
   getBuildingCardUpgradeIconsHtml,
   getBuildingAbilityCardsHtml,
 } from './uiHelpers.ts';
-import { addLog } from './log.ts';
+import { addLog } from '../shared/events.ts';
 import {
   getUnitCurrentMoveRange,
   getUnitCurrentAttackRange,
@@ -83,7 +83,7 @@ import {
   getGaussLineSquareKeysFromTarget,
   hasBallisticStatus,
 } from '../engine/artillery.ts';
-import { syncBoardVisualState } from '../bridge.ts';
+import { syncBoardVisualState } from '../shared/events.ts';
 import { getPlayerName, getMyPlayerId, isMyTurn } from '../playerNames.ts';
 
 export function getPlayerMaxEnergy(player: Player): number {

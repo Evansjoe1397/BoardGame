@@ -8,7 +8,30 @@ import { setEventSink, emit } from './shared/events.ts';
 import { applyEvents } from './eventApplier.ts';
 
 // Pure engine emits typed events; client applies them to DOM/Three.js.
-setEventSink(applyEvents);
+// In multiplayer we also push the resulting state to the server after every
+// drained event batch — that's the "trust-the-actor" relay covering input
+// handlers that haven't been migrated through the action+reducer protocol.
+setEventSink((events) => {
+  applyEvents(events);
+  // Push to the server only when something MEANINGFUL happened. A batch
+  // containing only BOARD_SYNC / UI_REFRESH is a pure re-render trigger
+  // (e.g. line ~1681 of renderUI runs syncBoardVisualState at the end of
+  // every render), not a state mutation — pushing those would cause an
+  // infinite ping-pong because every state_snapshot the client receives
+  // also calls renderUI, which emits BOARD_SYNC, which would push back.
+  const meaningful = events.some((e) => e.type !== 'BOARD_SYNC' && e.type !== 'UI_REFRESH');
+  if (!meaningful) return;
+  if (net.getIdentity() !== null && net.isConnected()) {
+    const raw = getActiveContext().state;
+    const snapshot = JSON.parse(JSON.stringify(raw));
+    console.log('[push]', {
+      events: events.map((e) => e.type),
+      current: snapshot.currentPlayerId,
+      units: snapshot.units?.map((u: { id: string; x: number; z: number }) => `${u.id}@${u.x},${u.z}`),
+    });
+    net.pushState(snapshot, events);
+  }
+});
 
 registerRenderUI(renderUI);
 registerSyncBoardVisualState(syncBoardVisualState);
@@ -88,18 +111,16 @@ import { onPointerDown, onPointerMove, onKeyDown, onKeyUp } from './input/inputH
 // --- Multiplayer (network + lobby) ---
 import * as net from './network/index.ts';
 import { initLobby, setOfflineStartHandler } from './ui/lobby.ts';
-import { state as gameState } from './state.ts';
+import { state as gameState, getActiveContext } from './state.ts';
 import type { GameState } from './types';
 
 function replaceLocalStateFrom(snapshot: GameState): void {
-  // Copy every top-level field of the snapshot onto the live state object.
-  // The Proxy in src/state.ts forwards every read/write, so every existing
-  // import { state } stays valid.
-  for (const key of Object.keys(gameState) as Array<keyof GameState>) {
-    delete (gameState as unknown as Record<string, unknown>)[key as string];
-  }
-  Object.assign(gameState as unknown as Record<string, unknown>, snapshot);
-  // Re-render UI and 3D scene from the new state.
+  console.log('[snapshot received]', {
+    current: snapshot.currentPlayerId,
+    units: snapshot.units?.map((u) => `${u.id}@${u.x},${u.z}`),
+  });
+  const ctx = getActiveContext();
+  ctx.state = snapshot;
   renderUI();
   syncBoardVisualState();
 }

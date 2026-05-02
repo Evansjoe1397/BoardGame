@@ -34,8 +34,7 @@ interface HitUserData {
 type HitObject = THREE.Object3D & { userData: HitUserData };
 import { CARD_LIBRARY, BUILD_CARD_LIBRARY } from '../data/cardLibrary.ts';
 import { DRONE_STATUS_LIBRARY, BUILDING_PERK_DRAFT_POOL } from '../data/statusLibrary.ts';
-import { renderUI, syncBoardVisualState } from '../bridge.ts';
-import { addLog } from '../ui/log.ts';
+import { renderUI, syncBoardVisualState, addLog } from '../shared/events.ts';
 
 import { applyUnitAttack, applyBaseAttack, removeUnit, destroyBase } from '../engine/combat.ts';
 import {

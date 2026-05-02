@@ -15,6 +15,11 @@ import { applyAction } from '../shared/reducer.ts';
 import { flushEvents } from '../shared/events.ts';
 import { setActiveContext } from '../state.ts';
 import { startGame as engineStartGame } from '../engine/turnManager.ts';
+import { registerServerEngineDeps } from './serverBootstrap.ts';
+
+// Wire up the engine's late-bound dependencies with their pure server-side
+// implementations. Without this every startTurn would set player.energy = 0.
+registerServerEngineDeps();
 
 const PORT = Number(process.env.PORT ?? 3001);
 const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -124,7 +129,11 @@ const server = Bun.serve<WsData, never>({
           // Auto-start the game once both players are in the room.
           if (room.status === 'waiting' && room.players.size === 2) {
             setActiveContext(room.context);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const stateRef = room.context.state as any;
+            console.log(`[room ${room.id}] BEFORE startGame: A.energy=${stateRef.players.A.energy} B.energy=${stateRef.players.B.energy} current=${stateRef.currentPlayerId}`);
             engineStartGame();
+            console.log(`[room ${room.id}] AFTER startGame: A.energy=${stateRef.players.A.energy} B.energy=${stateRef.players.B.energy} current=${stateRef.currentPlayerId}`);
             const events = flushEvents();
             room.status = 'playing';
             if (events.length > 0) {
@@ -168,6 +177,25 @@ const server = Bun.serve<WsData, never>({
           return;
         }
 
+        case 'state_push': {
+          const { pid, roomId } = ws.data;
+          if (!pid || !roomId) return;
+          const room = roomManager.get(roomId);
+          if (!room) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const incoming = msg.state as any;
+          console.log(`[room ${roomId}] state_push from ${pid}: A.energy=${incoming.players?.A?.energy} B.energy=${incoming.players?.B?.energy} current=${incoming.currentPlayerId} events=${msg.events.length}`);
+          for (const key of Object.keys(room.context.state)) {
+            delete (room.context.state as unknown as Record<string, unknown>)[key];
+          }
+          Object.assign(room.context.state as object, incoming);
+          if (msg.events.length > 0) {
+            room.broadcastExcept(pid, { type: 'events', events: msg.events });
+          }
+          room.broadcastExcept(pid, { type: 'state_snapshot', state: room.context.state });
+          return;
+        }
+
         case 'action': {
           const { pid, roomId } = ws.data;
           if (!pid || !roomId) {
@@ -188,8 +216,14 @@ const server = Bun.serve<WsData, never>({
           // Swap the room's state into the engine's active slot, run the
           // reducer, drain any events emitted into the shared buffer, broadcast.
           setActiveContext(room.context);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const before = room.context.state as any;
+          console.log(`[room ${roomId}] BEFORE action ${msg.action.type}: A.energy=${before.players.A.energy} B.energy=${before.players.B.energy} current=${before.currentPlayerId}`);
           const result = applyAction(msg.action);
           const events = flushEvents();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const after = room.context.state as any;
+          console.log(`[room ${roomId}] AFTER action ${msg.action.type}: A.energy=${after.players.A.energy} B.energy=${after.players.B.energy} current=${after.currentPlayerId}`);
 
           if (!result.ok) {
             send(ws, { type: 'action_rejected', reason: result.error });

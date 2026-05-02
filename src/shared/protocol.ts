@@ -26,8 +26,16 @@ export type ClientMessage =
   | { type: 'rejoin'; roomId: string; pid: string }
   | { type: 'leave_room' }
 
-  // Gameplay — wraps a typed Action
+  // Gameplay — wraps a typed Action (server-validated)
   | { type: 'action'; action: Action }
+
+  // "Trust the actor" state sync. Used while we incrementally migrate input
+  // handlers to the action protocol — the active player pushes their full
+  // local state after each local engine mutation, plus the events that were
+  // emitted during the mutation. The server stores the state as the
+  // authoritative copy and relays both events (for animations + log) and a
+  // state snapshot (for sync) to the other client.
+  | { type: 'state_push'; state: unknown; events: GameEvent[] }
 
   // Heartbeat
   | { type: 'ping' };

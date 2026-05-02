@@ -14,8 +14,7 @@ import {
 } from '../utils.ts';
 import { CARD_LIBRARY } from '../data/cardLibrary.ts';
 import { DRONE_STATUS_LIBRARY } from '../data/statusLibrary.ts';
-import { renderUI, syncBoardVisualState } from '../bridge.ts';
-import { addLog } from '../ui/log.ts';
+import { renderUI, syncBoardVisualState, addLog } from '../shared/events.ts';
 import { camera, raycaster, mouse, renderer, pressedKeys } from '../three/sceneSetup.ts';
 import { clickableMeshes } from '../visualState.ts';
 import type { PlayerId, Unit } from '../types';
