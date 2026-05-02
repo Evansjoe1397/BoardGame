@@ -5,7 +5,7 @@ import { registerRenderUI, registerSyncBoardVisualState } from './bridge.ts';
 import { renderUI, getPlayerMaxEnergy, refreshPlayerMaxEnergy } from './ui/renderUI.ts';
 import { syncBoardVisualState, initBoard, initAxisLabels } from './three/boardRenderer.ts';
 import { setEventSink, emit } from './shared/events.ts';
-import { applyEvents } from './eventApplier.ts';
+import { applyEvents } from './eventApplier/index.ts';
 
 // Pure engine emits typed events; client applies them to DOM/Three.js.
 // In multiplayer we also push the resulting state to the server after every

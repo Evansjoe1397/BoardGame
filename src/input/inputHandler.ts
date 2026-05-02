@@ -14,7 +14,7 @@ import {
 } from '../utils.ts';
 import { CARD_LIBRARY } from '../data/cardLibrary.ts';
 import { DRONE_STATUS_LIBRARY } from '../data/statusLibrary.ts';
-import { renderUI, syncBoardVisualState, addLog } from '../shared/events.ts';
+import { renderUI, syncBoardVisualState, addLog, emit } from '../shared/events.ts';
 import { camera, raycaster, mouse, renderer, pressedKeys } from '../three/sceneSetup.ts';
 import { clickableMeshes } from '../visualState.ts';
 import type { PlayerId, Unit } from '../types';
@@ -614,7 +614,16 @@ export function handleSquareClick(squareKey: string): void {
   selectedUnit.movementUsedThisTurn = movementUsed + distance;
   selectedUnit.hasMoved = selectedUnit.movementUsedThisTurn > 0;
   addLog(`${selectedUnit.owner} ${selectedUnit.unitName} moved to ${squareKey}.`);
-  startUnitMoveAnimation(selectedUnit.id, fromX, fromZ, target.x, target.z);
+  // Emit UNIT_MOVED so the eventApplier triggers the walk animation here AND
+  // — once the snapshot+events are forwarded — on the other client too.
+  emit({
+    type: 'UNIT_MOVED',
+    unitId: selectedUnit.id,
+    fromX,
+    fromZ,
+    toX: target.x,
+    toZ: target.z,
+  });
 
   const tangoReactorAtDestination = getTangoReactorForPosition(selectedUnit, target.x, target.z);
   if (tangoReactorAtDestination) {

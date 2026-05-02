@@ -44,7 +44,25 @@ export type GameEvent =
 
   // Lifecycle markers — used by client to time animation gaps. Server-broadcast
   // version of these events will be added in stage C with full semantics.
-  | { type: 'BASE_DESTROYED'; player: PlayerId };
+  | { type: 'BASE_DESTROYED'; player: PlayerId }
+
+  // Granular movement event — drives the walk animation on BOTH the acting
+  // client and any client that receives this event over the wire (without it
+  // the receiver would teleport the unit when applying a snapshot).
+  | {
+      type: 'UNIT_MOVED';
+      unitId: string;
+      fromX: number;
+      fromZ: number;
+      toX: number;
+      toZ: number;
+    };
+
+/** Shape utility: pick a single event variant by its `type` discriminator. */
+export type EventOfType<T extends GameEvent['type']> = Extract<GameEvent, { type: T }>;
+
+/** Handler signature for one event variant. */
+export type EventHandler<T extends GameEvent['type']> = (event: EventOfType<T>) => void;
 
 let eventBuffer: GameEvent[] = [];
 
