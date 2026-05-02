@@ -16,7 +16,6 @@
  */
 
 import type { Action } from './actions.ts';
-import { flushEvents } from './events.ts';
 import type { GameEvent } from './events.ts';
 
 // Engine entry points that ARE wired today
@@ -45,7 +44,11 @@ export function applyAction(action: Action): ReduceResult | ReduceError {
   switch (action.type) {
     case 'END_TURN':
       engineEndTurn();
-      return { ok: true, events: flushEvents() };
+      // Events emitted during the engine call live in the shared buffer
+      // and are drained on a microtask by the configured sink (DOM applier
+      // on the client, broadcaster on the server in Stage C). We do NOT
+      // drain here — that would race the microtask sink and lose events.
+      return { ok: true, events: [] };
 
     // ---------------------------------------------------------------------
     // The remaining action handlers are intentionally not wired yet.
@@ -82,7 +85,7 @@ export function applyAction(action: Action): ReduceResult | ReduceError {
       return {
         ok: false,
         error: `Action ${action.type} not yet wired through reducer; input layer still calls engine directly.`,
-        events: flushEvents(),
+        events: [],
       };
   }
 }
