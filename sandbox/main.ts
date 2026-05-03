@@ -1157,21 +1157,24 @@ async function loadWeapon(): Promise<void> {
     ? targetSize / rifleMaxDim
     : targetSize / (Math.max(size.x, size.y, size.z) || 1);
 
-  // No bbox-centering on rigged FPS arms — the bbox is computed in T-pose
-  // (arms wide), so its centre isn't where the rifle ends up after the idle
-  // animation deforms the bones. Just attach inner directly and let the
-  // skeleton's natural origin (wrist/grip) act as the wrap pivot.
+  // Centre the rig on the wrap origin. In bind-pose the bbox-centre falls
+  // somewhere in the middle of the figure, but in idle-pose the rifle ends
+  // up offset from there (typically held forward+up of the body's centre).
+  // We compensate via wrap.position — moving the wrap UP brings the rifle
+  // into the camera's view.
+  inner.position.set(-center.x, -center.y, -center.z);
   const wrap = new THREE.Group();
   wrap.add(inner);
 
   wrap.scale.setScalar(scale);
-  // Cransh pack: rifle barrel runs along +Z in glb; camera forward is -Z, so
-  // flip 180° around Y. Bring the rig down and slightly right.
   wrap.rotation.set(0, Math.PI, 0);
-  wrap.position.set(0.10, -0.40, -0.20);
-  // Disable frustum culling on the camera-attached rig so the local bbox
-  // doesn't make it flicker out at the near plane during head-bob.
-  wrap.traverse(c => { c.frustumCulled = false; });
+  // Empirically tuned to put the held rifle in the lower-right of view
+  // for the Cransh "FPS hands rifle pack". If still off, adjust Y/Z.
+  wrap.position.set(0, 0.45, -0.50);
+  wrap.traverse(c => {
+    c.visible = true;
+    c.frustumCulled = false;
+  });
   camera.add(wrap);
 
   // animations

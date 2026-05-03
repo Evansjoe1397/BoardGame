@@ -200,11 +200,21 @@ export function executeArtilleryGauss(artillery: Unit, lineKeys: string[]): void
       skipAttackVisual: true,
     });
   }
+  // Vulnerable-square explosions: emitted from the engine so both clients
+  // see them (the firing client and the opponent's view).
   for (const basePlayerId of ['A', 'B'] as PlayerId[]) {
     const frontalSquares = BASE_ARTILLERY_FRONT_SQUARES[basePlayerId];
     let baseHits = 0;
     for (const squareKey of lineKeys) {
-      if (frontalSquares?.has(squareKey)) baseHits += 1;
+      if (frontalSquares?.has(squareKey)) {
+        baseHits += 1;
+        const sq = fromSquareKey(squareKey);
+        emit({
+          type: 'EFFECT_EXPLOSION',
+          gridX: sq.x, gridZ: sq.z, y: 0.5,
+          options: { particleCount: 14, duration: 0.62, speedMin: 1.2, speedMax: 2.4 },
+        });
+      }
     }
     if (baseHits > 0) {
       const total = damage * baseHits;
@@ -237,7 +247,15 @@ export function executeArtilleryArea(artillery: Unit, areaKeys: string[]): void 
     const frontalSquares = BASE_ARTILLERY_FRONT_SQUARES[basePlayerId];
     let baseHits = 0;
     for (const squareKey of areaKeys) {
-      if (frontalSquares?.has(squareKey)) baseHits += 1;
+      if (frontalSquares?.has(squareKey)) {
+        baseHits += 1;
+        const sq = fromSquareKey(squareKey);
+        emit({
+          type: 'EFFECT_EXPLOSION',
+          gridX: sq.x, gridZ: sq.z, y: 0.5,
+          options: { particleCount: 14, duration: 0.62, speedMin: 1.2, speedMax: 2.4 },
+        });
+      }
     }
     if (baseHits > 0) {
       const total = damage * baseHits;
@@ -247,6 +265,19 @@ export function executeArtilleryArea(artillery: Unit, areaKeys: string[]): void 
       );
     }
   }
+  // Center burst — averaged over the 2x2 area.
+  let cx = 0, cz = 0;
+  for (const k of areaKeys) {
+    const sq = fromSquareKey(k);
+    cx += sq.x; cz += sq.z;
+  }
+  cx /= areaKeys.length; cz /= areaKeys.length;
+  emit({
+    type: 'EFFECT_EXPLOSION',
+    gridX: cx, gridZ: cz, y: 0.55,
+    options: { particleCount: 20, duration: 0.8, speedMin: 1.2, speedMax: 2.9 },
+  });
+
   markArtilleryFired(artillery);
   addLog(`${artillery.owner} Artillery bombarded ${areaKeys.join(', ')} for ${damage} each square.`);
 }

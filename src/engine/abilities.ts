@@ -616,6 +616,19 @@ export function executeSpecialistEmp(specialist: Unit, areaKeys: string[]): void
     });
   }
 
+  // Center burst — visible to both clients via the broadcast event stream.
+  let cx = 0, cz = 0;
+  for (const k of areaKeys) {
+    const sq = fromSquareKey(k);
+    cx += sq.x; cz += sq.z;
+  }
+  cx /= areaKeys.length; cz /= areaKeys.length;
+  emit({
+    type: 'EFFECT_EXPLOSION',
+    gridX: cx, gridZ: cz, y: 0.5,
+    options: { particleCount: 16, duration: 0.55, speedMin: 1.0, speedMax: 2.2 },
+  });
+
   addLog(
     `${specialist.owner} Specialist used EMP on ${areaKeys.join(', ')}.` +
       (hasSalvo ? ` (Salvo uses: ${specialist.specialistEmpUsesThisTurn}/2)` : ''),

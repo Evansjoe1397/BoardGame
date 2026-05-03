@@ -55,7 +55,6 @@ import {
 } from '../engine/abilities.ts';
 import {
   getUnitHeadWorldPosition,
-  playExplosionAt,
   playSystemShockImpact,
   playTeleportBlinkAt,
   playArtilleryShellShot,
@@ -481,21 +480,8 @@ export function handleArtilleryAttackTargetClick(hit: HitObject): void {
       gridToWorld(firstSquare.x, firstSquare.z),
       gridToWorld(lastSquare.x, lastSquare.z),
     );
-    for (const basePlayerId of ['A', 'B'] as PlayerId[]) {
-      const frontalSquares = BASE_ARTILLERY_FRONT_SQUARES[basePlayerId];
-      for (const squareKey of lineKeys) {
-        if (frontalSquares?.has(squareKey)) {
-          const sq = fromSquareKey(squareKey);
-          const pos = gridToWorld(sq.x, sq.z);
-          playExplosionAt(new THREE.Vector3(pos.x, 0.5, pos.z), {
-            particleCount: 14,
-            duration: 0.62,
-            speedMin: 1.2,
-            speedMax: 2.4,
-          });
-        }
-      }
-    }
+    // Frontal-square explosions are emitted by executeArtilleryGauss as
+    // EFFECT_EXPLOSION events — visible to both clients via the broadcast.
     dispatch({
       type: 'ARTILLERY_FIRE',
       unitId: artillery.id,
@@ -524,34 +510,16 @@ export function handleArtilleryAttackTargetClick(hit: HitObject): void {
     return;
   }
 
-  // Visual cues (client-only)
+  // Shell-arc visual stays client-only — it's a flying projectile that
+  // doesn't have an obvious server-side analogue. The center burst and
+  // frontal-square explosions are emitted by executeArtilleryArea so
+  // both clients see the impact.
   const center = new THREE.Vector3();
   for (const key of areaKeys) {
     center.add(gridToWorld(fromSquareKey(key).x, fromSquareKey(key).z));
   }
   center.multiplyScalar(1 / areaKeys.length);
   playArtilleryShellShot(artillery.id, center);
-  for (const basePlayerId of ['A', 'B'] as PlayerId[]) {
-    const frontalSquares = BASE_ARTILLERY_FRONT_SQUARES[basePlayerId];
-    for (const squareKey of areaKeys) {
-      if (frontalSquares?.has(squareKey)) {
-        const sq = fromSquareKey(squareKey);
-        const pos = gridToWorld(sq.x, sq.z);
-        playExplosionAt(new THREE.Vector3(pos.x, 0.5, pos.z), {
-          particleCount: 14,
-          duration: 0.62,
-          speedMin: 1.2,
-          speedMax: 2.4,
-        });
-      }
-    }
-  }
-  playExplosionAt(new THREE.Vector3(center.x, 0.55, center.z), {
-    particleCount: 20,
-    duration: 0.8,
-    speedMin: 1.2,
-    speedMax: 2.9,
-  });
   dispatch({
     type: 'ARTILLERY_FIRE',
     unitId: artillery.id,
@@ -608,19 +576,8 @@ export function handleSpecialistEmpTargetClick(hit: HitObject): void {
     return;
   }
 
-  // Visual cue (client-only)
-  const center = new THREE.Vector3();
-  for (const key of areaKeys) {
-    center.add(gridToWorld(fromSquareKey(key).x, fromSquareKey(key).z));
-  }
-  center.multiplyScalar(1 / areaKeys.length);
-  playExplosionAt(new THREE.Vector3(center.x, 0.5, center.z), {
-    particleCount: 16,
-    duration: 0.55,
-    speedMin: 1.0,
-    speedMax: 2.2
-  });
-
+  // EMP center burst is emitted as EFFECT_EXPLOSION from
+  // executeSpecialistEmp so both clients see the impact.
   dispatch({
     type: 'SPECIALIST_EMP',
     casterUnitId: specialist.id,
