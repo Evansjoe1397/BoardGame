@@ -14,7 +14,8 @@ import {
 } from '../utils.ts';
 import { CARD_LIBRARY } from '../data/cardLibrary.ts';
 import { DRONE_STATUS_LIBRARY } from '../data/statusLibrary.ts';
-import { renderUI, syncBoardVisualState, addLog, emit } from '../shared/events.ts';
+import { renderUI, syncBoardVisualState, emit } from '../shared/events.ts';
+import { logHint } from '../ui/log.ts';
 import { camera, raycaster, mouse, renderer, pressedKeys } from '../three/sceneSetup.ts';
 import { clickableMeshes } from '../visualState.ts';
 import type { PlayerId, Unit } from '../types';
@@ -95,7 +96,7 @@ export function onPointerDown(event: PointerEvent): void {
   const intersections = raycaster.intersectObjects(clickableMeshes, false);
   if (intersections.length === 0) {
     if (state.mode === 'attack_targeting') {
-      addLog('Select an enemy unit or enemy base within attack range.');
+      logHint('Select an enemy unit or enemy base within attack range.');
       return;
     }
     if (
@@ -111,62 +112,62 @@ export function onPointerDown(event: PointerEvent): void {
       return;
     }
     if (state.mode === 'harvest_absorb') {
-      addLog('Select a Drone card in hand to Absorb, or click Harvest Data again to cancel.');
+      logHint('Select a Drone card in hand to Absorb, or click Harvest Data again to cancel.');
       return;
     }
     if (state.mode === 'system_shock_card') {
-      addLog('Select an eligible enemy drone to cast System Shock Level 1, or click Process Echo X to store it.');
+      logHint('Select an eligible enemy drone to cast System Shock Level 1, or click Process Echo X to store it.');
       return;
     }
     if (state.mode === 'shielding_card') {
-      addLog('Select your drone to apply Shielding Level 1, or click Process Echo X to store Shielding.');
+      logHint('Select your drone to apply Shielding Level 1, or click Process Echo X to store Shielding.');
       return;
     }
     if (state.mode === 'shimmering_card') {
-      addLog('Select a board square for Shimmering Cloak, or click Process Echo X to store it.');
+      logHint('Select a board square for Shimmering Cloak, or click Process Echo X to store it.');
       return;
     }
     if (state.mode === 'system_shock_targeting_echo') {
-      addLog('Select an eligible enemy drone to cast System Shock from Process Echo.');
+      logHint('Select an eligible enemy drone to cast System Shock from Process Echo.');
       return;
     }
     if (state.mode === 'shielding_equip_instant' || state.mode === 'shielding_equip_echo') {
-      addLog('Select one of your drones to apply Shielding.');
+      logHint('Select one of your drones to apply Shielding.');
       return;
     }
     if (state.mode === 'shimmering_targeting_instant' || state.mode === 'shimmering_targeting_echo') {
-      addLog('Select a square for Shimmering Cloak.');
+      logHint('Select a square for Shimmering Cloak.');
       return;
     }
     if (state.mode === 'ghostblade_teleport_targeting') {
-      addLog('Select an empty square to teleport Ghostblade.');
+      logHint('Select an empty square to teleport Ghostblade.');
       return;
     }
     if (state.mode === 'artillery_attack_targeting') {
       const artillery = getSelectedUnit();
       if (artillery && hasBallisticStatus(artillery)) {
-        addLog('Select an enemy Drone or vulnerable enemy base square for Ballistic strike.');
+        logHint('Select an enemy Drone or vulnerable enemy base square for Ballistic strike.');
       } else if (artillery && unitHasStatus(artillery, DRONE_STATUS_LIBRARY.GAUSS.id)) {
-        addLog('Select an adjacent direction square (or its highlighted line) for Gauss strike.');
+        logHint('Select an adjacent direction square (or its highlighted line) for Gauss strike.');
       } else {
-        addLog('Select a 2x2 area for Artillery strike.');
+        logHint('Select a 2x2 area for Artillery strike.');
       }
       return;
     }
     if (state.mode === 'specialist_emp_targeting') {
-      addLog('Select a 2x2 area for Specialist EMP.');
+      logHint('Select a 2x2 area for Specialist EMP.');
       return;
     }
     if (state.mode === 'core_magnet_bulwark_targeting') {
-      addLog('Select one adjacent square to aim Bulwark Core Magnet.');
+      logHint('Select one adjacent square to aim Bulwark Core Magnet.');
       return;
     }
     if (state.mode === 'foundation_targeting') {
-      addLog('Select one of your buildings to destroy with Foundation.');
+      logHint('Select one of your buildings to destroy with Foundation.');
       return;
     }
     if (state.mode === 'overload_targeting') {
-      addLog('Select a friendly drone target for Overload.');
+      logHint('Select a friendly drone target for Overload.');
       return;
     }
     clearSelection();
@@ -183,7 +184,7 @@ export function onPointerDown(event: PointerEvent): void {
   }
   if (state.mode === 'shielding_card') {
     if (hitType !== 'unit') {
-      addLog('Click your drone to apply Shielding Level 1, or click Process Echo X to store Shielding.');
+      logHint('Click your drone to apply Shielding Level 1, or click Process Echo X to store Shielding.');
       return;
     }
     state.mode = 'shielding_equip_instant';
@@ -192,7 +193,7 @@ export function onPointerDown(event: PointerEvent): void {
   }
   if (state.mode === 'shimmering_card') {
     if (hitType !== 'square' && hitType !== 'base') {
-      addLog('Select a board square for Shimmering Cloak.');
+      logHint('Select a board square for Shimmering Cloak.');
       return;
     }
     state.mode = 'shimmering_targeting_instant';
@@ -263,15 +264,15 @@ export function onPointerDown(event: PointerEvent): void {
     state.mode === 'foundation_confirm'
   ) {
     if (state.mode === 'foundation_confirm') {
-      addLog('Confirm or cancel Foundation action in the prompt.');
+      logHint('Confirm or cancel Foundation action in the prompt.');
     } else {
-      addLog('Pick a Drone Status and confirm to build this factory.');
+      logHint('Pick a Drone Status and confirm to build this factory.');
     }
     return;
   }
 
   if (state.mode === 'harvest_absorb') {
-    addLog('Select a Drone card in hand to Absorb, or click Harvest Data again to cancel.');
+    logHint('Select a Drone card in hand to Absorb, or click Harvest Data again to cancel.');
     return;
   }
 
@@ -352,24 +353,24 @@ export function handleCardTargetClick(hit: HitObject): void {
 
   const cardTemplate = CARD_LIBRARY[selectedCard.cardId];
   if (!cardTemplate || cardTemplate.cardType !== 'unit_summon') {
-    addLog('This card does not target board squares.');
+    logHint('This card does not target board squares.');
     return;
   }
   const targetSquare = hit.userData.squareKey;
 
   if (hit.userData.type !== 'square') {
-    addLog('Select a board square to summon the unit.');
+    logHint('Select a board square to summon the unit.');
     return;
   }
 
   if (!targetSquare || !getSummonSquares(currentPlayer.id).includes(targetSquare)) {
-    addLog(`Invalid summon target. Unit must be summoned adjacent to Player ${currentPlayer.id} base.`);
+    logHint(`Invalid summon target. Unit must be summoned adjacent to Player ${currentPlayer.id} base.`);
     return;
   }
 
   const cardEnergyCost = getCardEnergyCost(selectedCard);
   if (currentPlayer.energy < cardEnergyCost) {
-    addLog('Not enough energy to play this card.');
+    logHint('Not enough energy to play this card.');
     return;
   }
 
@@ -406,50 +407,50 @@ export function handleUnitClick(unitId: string): void {
   }
 
   if (!selectedUnit || selectedUnit.owner !== currentPlayerId) {
-    addLog('Select one of your units first.');
+    logHint('Select one of your units first.');
     return;
   }
 
   if (!canPlayerDirectlyTargetUnit(currentPlayerId, clickedUnit)) {
-    addLog('This Drone is hidden by Shimmering Cloak and cannot be directly targeted by you.');
+    logHint('This Drone is hidden by Shimmering Cloak and cannot be directly targeted by you.');
     return;
   }
 
   if (isUnitPlanted(selectedUnit)) {
     if (!hasBeaconCoreMagnet(selectedUnit)) {
-      addLog('This Tank Drone is planted and cannot attack while channeling Core Magnet.');
+      logHint('This Tank Drone is planted and cannot attack while channeling Core Magnet.');
       return;
     }
   }
   if (isUnitMovementStunned(selectedUnit)) {
-    addLog('This Drone is Dazzled and cannot attack this turn.');
+    logHint('This Drone is Dazzled and cannot attack this turn.');
     return;
   }
 
   if (selectedUnit.unitTypeId === 'ARTILLERY_UNIT' && state.mode !== 'artillery_attack_targeting') {
-    addLog('Artillery can attack only through Attack: Shell ability.');
+    logHint('Artillery can attack only through Attack: Shell ability.');
     return;
   }
 
   if (selectedUnit.hasMoved && !canUnitAttackAfterMoving(selectedUnit)) {
-    addLog('Ghostblade cannot attack after moving unless it is damaged with Rage or gets a special improvement.');
+    logHint('Ghostblade cannot attack after moving unless it is damaged with Rage or gets a special improvement.');
     return;
   }
   const tankFaceEaterCooldown = getTankFaceEaterAttackCooldown(selectedUnit);
   if (tankFaceEaterCooldown > 0) {
-    addLog(`Face-Eater attack cooldown: ${tankFaceEaterCooldown} turn(s) remaining.`);
+    logHint(`Face-Eater attack cooldown: ${tankFaceEaterCooldown} turn(s) remaining.`);
     return;
   }
 
   if (selectedUnit.hasAttacked && !consumeSystemShockFollowUp(selectedUnit, 'attack')) {
-    addLog('This unit has already attacked this turn.');
+    logHint('This unit has already attacked this turn.');
     return;
   }
 
   const currentAttackRange = getUnitCurrentAttackRange(selectedUnit);
   const distance = getDistance(selectedUnit.x, selectedUnit.z, clickedUnit.x, clickedUnit.z);
   if (distance > currentAttackRange) {
-    addLog(`Target out of attack range (${currentAttackRange}).`);
+    logHint(`Target out of attack range (${currentAttackRange}).`);
     return;
   }
 
@@ -471,44 +472,44 @@ export function handleUnitClick(unitId: string): void {
 export function handleBaseClick(baseOwner: string, squareKey: string): void {
   const currentPlayerId = state.currentPlayerId;
   if (baseOwner === currentPlayerId) {
-    addLog('That is your own base.');
+    logHint('That is your own base.');
     return;
   }
 
   const selectedUnit = getSelectedUnit();
   if (!selectedUnit || selectedUnit.owner !== currentPlayerId) {
-    addLog('Select one of your units first.');
+    logHint('Select one of your units first.');
     return;
   }
 
   if (isUnitPlanted(selectedUnit)) {
     if (!hasBeaconCoreMagnet(selectedUnit)) {
-      addLog('This Tank Drone is planted and cannot attack while channeling Core Magnet.');
+      logHint('This Tank Drone is planted and cannot attack while channeling Core Magnet.');
       return;
     }
   }
   if (isUnitMovementStunned(selectedUnit)) {
-    addLog('This Drone is Dazzled and cannot attack this turn.');
+    logHint('This Drone is Dazzled and cannot attack this turn.');
     return;
   }
 
   if (selectedUnit.unitTypeId === 'ARTILLERY_UNIT') {
-    addLog('Artillery cannot directly target bases with Attack.');
+    logHint('Artillery cannot directly target bases with Attack.');
     return;
   }
 
   if (selectedUnit.hasMoved && !canUnitAttackAfterMoving(selectedUnit)) {
-    addLog('Ghostblade cannot attack after moving unless it is damaged with Rage or gets a special improvement.');
+    logHint('Ghostblade cannot attack after moving unless it is damaged with Rage or gets a special improvement.');
     return;
   }
   const tankFaceEaterCooldown = getTankFaceEaterAttackCooldown(selectedUnit);
   if (tankFaceEaterCooldown > 0) {
-    addLog(`Face-Eater attack cooldown: ${tankFaceEaterCooldown} turn(s) remaining.`);
+    logHint(`Face-Eater attack cooldown: ${tankFaceEaterCooldown} turn(s) remaining.`);
     return;
   }
 
   if (selectedUnit.hasAttacked && !consumeSystemShockFollowUp(selectedUnit, 'attack')) {
-    addLog('This unit has already attacked this turn.');
+    logHint('This unit has already attacked this turn.');
     return;
   }
 
@@ -516,7 +517,7 @@ export function handleBaseClick(baseOwner: string, squareKey: string): void {
   const currentAttackRange = getUnitCurrentAttackRange(selectedUnit);
   const distance = getDistance(selectedUnit.x, selectedUnit.z, baseSquare.x, baseSquare.z);
   if (distance > currentAttackRange) {
-    addLog(`Enemy base is out of attack range (${currentAttackRange}).`);
+    logHint(`Enemy base is out of attack range (${currentAttackRange}).`);
     return;
   }
 
@@ -537,7 +538,7 @@ export function handleBaseClick(baseOwner: string, squareKey: string): void {
 
 export function handleSquareClick(squareKey: string): void {
   if (state.mode === 'attack_targeting') {
-    addLog('Select an enemy unit or enemy base within attack range.');
+    logHint('Select an enemy unit or enemy base within attack range.');
     return;
   }
 
@@ -548,33 +549,33 @@ export function handleSquareClick(squareKey: string): void {
     return;
   }
   if (isUnitMovementStunned(selectedUnit)) {
-    addLog('This Drone is Dazzled and cannot move this turn.');
+    logHint('This Drone is Dazzled and cannot move this turn.');
     return;
   }
 
   if (isUnitPlanted(selectedUnit)) {
-    addLog('This Tank Drone is planted and cannot move while channeling Core Magnet.');
+    logHint('This Tank Drone is planted and cannot move while channeling Core Magnet.');
     return;
   }
   if (selectedUnit.unitTypeId === 'ARTILLERY_UNIT' && selectedUnit.artillerySetUpActive) {
-    addLog('Artillery cannot move while Set Up is active.');
+    logHint('Artillery cannot move while Set Up is active.');
     return;
   }
 
   if (selectedUnit.hasAttacked && !selectedUnit.tacticalDashActiveThisTurn) {
     if (!consumeSystemShockFollowUp(selectedUnit, 'move')) {
-      addLog('This unit cannot move after attacking without Tactical Dash.');
+      logHint('This unit cannot move after attacking without Tactical Dash.');
       return;
     }
   }
 
   if (isActiveBaseSquare(squareKey)) {
-    addLog('Units cannot move onto base squares.');
+    logHint('Units cannot move onto base squares.');
     return;
   }
 
   if (!isSquareWalkable(squareKey)) {
-    addLog('That square is occupied or blocked.');
+    logHint('That square is occupied or blocked.');
     return;
   }
 
@@ -583,13 +584,13 @@ export function handleSquareClick(squareKey: string): void {
   const movementUsed = selectedUnit.movementUsedThisTurn ?? 0;
   const movementRemaining = currentMoveRange - movementUsed;
   if (movementRemaining <= 0) {
-    addLog('This unit has no remaining movement this turn.');
+    logHint('This unit has no remaining movement this turn.');
     return;
   }
 
   const distance = getDistance(selectedUnit.x, selectedUnit.z, target.x, target.z);
   if (distance > movementRemaining) {
-    addLog(`Target out of remaining move range (${movementRemaining}).`);
+    logHint(`Target out of remaining move range (${movementRemaining}).`);
     return;
   }
 
@@ -601,7 +602,7 @@ export function handleSquareClick(squareKey: string): void {
       renderUI();
       return;
     }
-    addLog(`${selectedUnit.unitName} movement was interrupted by Tango.`);
+    logHint(`${selectedUnit.unitName} movement was interrupted by Tango.`);
     syncBoardVisualState();
     renderUI();
     return;

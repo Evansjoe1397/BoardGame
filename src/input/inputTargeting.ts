@@ -34,7 +34,8 @@ interface HitUserData {
 type HitObject = THREE.Object3D & { userData: HitUserData };
 import { CARD_LIBRARY, BUILD_CARD_LIBRARY } from '../data/cardLibrary.ts';
 import { DRONE_STATUS_LIBRARY, BUILDING_PERK_DRAFT_POOL } from '../data/statusLibrary.ts';
-import { renderUI, syncBoardVisualState, addLog } from '../shared/events.ts';
+import { renderUI, syncBoardVisualState } from '../shared/events.ts';
+import { logHint } from '../ui/log.ts';
 
 import { applyUnitAttack, applyBaseAttack, removeUnit, destroyBase } from '../engine/combat.ts';
 import {
@@ -112,7 +113,7 @@ export function handleRepairTargetClick(hit: HitObject): void {
   }
 
   if (hit.userData.type !== 'unit') {
-    addLog('Select an allied drone target for Repair.');
+    logHint('Select an allied drone target for Repair.');
     return;
   }
 
@@ -122,35 +123,35 @@ export function handleRepairTargetClick(hit: HitObject): void {
   }
 
   if (target.id === caster.id) {
-    addLog('This Drone cannot target itself with Repair.');
+    logHint('This Drone cannot target itself with Repair.');
     return;
   }
 
   if (target.owner !== caster.owner) {
-    addLog('Repair can only target allied drones.');
+    logHint('Repair can only target allied drones.');
     return;
   }
 
   if (!canPlayerDirectlyTargetUnit(state.currentPlayerId, target)) {
-    addLog('This Drone is hidden by Shimmering Cloak and cannot be targeted by your abilities.');
+    logHint('This Drone is hidden by Shimmering Cloak and cannot be targeted by your abilities.');
     return;
   }
 
   const distance = getDistance(caster.x, caster.z, target.x, target.z);
   if (distance > caster.attackRange) {
-    addLog(`Target out of Repair range (${caster.attackRange}).`);
+    logHint(`Target out of Repair range (${caster.attackRange}).`);
     return;
   }
 
   const currentPlayer = getCurrentPlayer();
   const repairEnergyCost = unitHasStatus(caster, DRONE_STATUS_LIBRARY.SMART.id) ? 0 : 5;
   if (currentPlayer.energy < repairEnergyCost) {
-    addLog('Not enough Energy to use Repair.');
+    logHint('Not enough Energy to use Repair.');
     return;
   }
 
   if (caster.repairCooldown > 0) {
-    addLog('Repair is on cooldown.');
+    logHint('Repair is on cooldown.');
     return;
   }
 
@@ -168,12 +169,12 @@ interface SystemShockContext {
 
 export function handleSystemShockTargetClick(hit: HitObject, context: SystemShockContext = { source: 'hand', level: 1 }): void {
   if (hit.userData.type === 'base') {
-    addLog('System Shock cannot target enemy bases. Select an enemy drone.');
+    logHint('System Shock cannot target enemy bases. Select an enemy drone.');
     return;
   }
 
   if (hit.userData.type !== 'unit') {
-    addLog('Select an enemy drone target for System Shock.');
+    logHint('Select an enemy drone target for System Shock.');
     return;
   }
 
@@ -182,13 +183,13 @@ export function handleSystemShockTargetClick(hit: HitObject, context: SystemShoc
     return;
   }
   if (target.owner === state.currentPlayerId) {
-    addLog('System Shock can only target enemy drones.');
+    logHint('System Shock can only target enemy drones.');
     return;
   }
   const eligibleTargets = getSystemShockTargetableEnemyUnits(state.currentPlayerId);
   const eligibleIds = new Set(eligibleTargets.map((unit) => unit.id));
   if (!eligibleIds.has(target.id)) {
-    addLog('This enemy drone is not eligible for System Shock. Keep a friendly drone within attack range of it.');
+    logHint('This enemy drone is not eligible for System Shock. Keep a friendly drone within attack range of it.');
     return;
   }
 
@@ -208,7 +209,7 @@ export function handleSystemShockTargetClick(hit: HitObject, context: SystemShoc
       return;
     }
     if (currentPlayer.energy < CARD_LIBRARY.SYSTEM_SHOCK.energyCost) {
-      addLog('Not enough Energy to use System Shock.');
+      logHint('Not enough Energy to use System Shock.');
       return;
     }
     currentPlayer.energy -= CARD_LIBRARY.SYSTEM_SHOCK.energyCost;
@@ -223,7 +224,7 @@ export function handleSystemShockTargetClick(hit: HitObject, context: SystemShoc
     }
     const slotCard = currentPlayer.processEcho?.[slot];
     if (!slotCard || slotCard.cardId !== CARD_LIBRARY.SYSTEM_SHOCK.id) {
-      addLog('That Process Echo slot is empty.');
+      logHint('That Process Echo slot is empty.');
       clearSelection();
       renderUI();
       return;
@@ -239,19 +240,19 @@ export function handleSystemShockTargetClick(hit: HitObject, context: SystemShoc
   playSystemShockImpact(targetHead, target.id);
   const shellGuardOutcome = applyGhostbladeShellGuard(target, shockDamage, DAMAGE_TYPES.SYSTEM);
   target.hitPoints -= shellGuardOutcome.damage;
-  addLog(`Player ${currentPlayer.id} cast System Shock Level ${safeLevel} on ${target.unitName} for ${shellGuardOutcome.damage} (${DAMAGE_TYPES.SYSTEM}).`);
+  logHint(`Player ${currentPlayer.id} cast System Shock Level ${safeLevel} on ${target.unitName} for ${shellGuardOutcome.damage} (${DAMAGE_TYPES.SYSTEM}).`);
   if (shellGuardOutcome.consumed) {
-    addLog(`${target.unitName} Shell guard was consumed.`);
+    logHint(`${target.unitName} Shell guard was consumed.`);
   }
   if (target.hitPoints <= 0) {
-    addLog(`${target.unitName} of Player ${target.owner} was destroyed.`);
+    logHint(`${target.unitName} of Player ${target.owner} was destroyed.`);
     playExplosionAt(targetPos);
     removeUnit(target.id);
   }
 
   if (safeLevel >= 3 && !getUnitById(targetId)) {
     currentPlayer.energy = Math.min(getPlayerMaxEnergy(currentPlayer), currentPlayer.energy + 10);
-    addLog(`System Shock Level 3 bonus: Player ${currentPlayer.id} gained 10 Energy.`);
+    logHint(`System Shock Level 3 bonus: Player ${currentPlayer.id} gained 10 Energy.`);
   }
 
   clearSelection();
@@ -265,7 +266,7 @@ export function handleSystemShockTargetClick(hit: HitObject, context: SystemShoc
 
 export function handleShieldingTargetClick(hit: HitObject): void {
   if (hit.userData.type !== 'unit') {
-    addLog('Select one of your drones to apply Shielding.');
+    logHint('Select one of your drones to apply Shielding.');
     return;
   }
 
@@ -274,15 +275,15 @@ export function handleShieldingTargetClick(hit: HitObject): void {
     return;
   }
   if (!canPlayerDirectlyTargetUnit(state.currentPlayerId, unit)) {
-    addLog('This Drone is hidden by Shimmering Cloak and cannot be targeted by your abilities.');
+    logHint('This Drone is hidden by Shimmering Cloak and cannot be targeted by your abilities.');
     return;
   }
   if (unit.owner !== state.currentPlayerId) {
-    addLog('Shielding can only target your own drones.');
+    logHint('Shielding can only target your own drones.');
     return;
   }
   if (unitHasStatus(unit, DRONE_STATUS_LIBRARY.SALVO.id)) {
-    addLog('This Drone cannot gain Shield because of Salvo status.');
+    logHint('This Drone cannot gain Shield because of Salvo status.');
     return;
   }
 
@@ -301,7 +302,7 @@ export function handleShieldingTargetClick(hit: HitObject): void {
     }
     const cardTemplate = CARD_LIBRARY.SHIELDING;
     if (currentPlayer.energy < cardTemplate.energyCost) {
-      addLog(`Not enough Energy to play ${cardTemplate.cardName}.`);
+      logHint(`Not enough Energy to play ${cardTemplate.cardName}.`);
       return;
     }
     currentPlayer.energy -= cardTemplate.energyCost;
@@ -322,7 +323,7 @@ export function handleShieldingTargetClick(hit: HitObject): void {
     }
     const slotCard = currentPlayer.processEcho?.[slot];
     if (!slotCard || slotCard.cardId !== CARD_LIBRARY.SHIELDING.id) {
-      addLog('That Process Echo slot is empty.');
+      logHint('That Process Echo slot is empty.');
       clearSelection();
       renderUI();
       return;
@@ -338,7 +339,7 @@ export function handleShieldingTargetClick(hit: HitObject): void {
 
 export function handleShimmeringSquareClick(hit: HitObject): void {
   if (hit.userData.type !== 'square' && hit.userData.type !== 'base') {
-    addLog('Select a board square for Shimmering Cloak.');
+    logHint('Select a board square for Shimmering Cloak.');
     return;
   }
   const squareKey = hit.userData.squareKey;
@@ -354,14 +355,14 @@ export function handleShimmeringSquareClick(hit: HitObject): void {
   const selected = state.pendingShimmeringSquares ?? [];
   if (selected.includes(squareKey)) {
     state.pendingShimmeringSquares = selected.filter((key) => key !== squareKey);
-    addLog(`Removed ${squareKey} from Shimmering Cloak selection.`);
+    logHint(`Removed ${squareKey} from Shimmering Cloak selection.`);
     syncBoardVisualState();
     renderUI();
     return;
   }
   state.pendingShimmeringSquares = [...selected, squareKey].slice(0, requiredSquares);
   if (state.pendingShimmeringSquares.length < requiredSquares) {
-    addLog(`Selected ${squareKey}. Select ${requiredSquares - state.pendingShimmeringSquares.length} more square(s).`);
+    logHint(`Selected ${squareKey}. Select ${requiredSquares - state.pendingShimmeringSquares.length} more square(s).`);
     syncBoardVisualState();
     renderUI();
     return;
@@ -375,7 +376,7 @@ export function handleShimmeringSquareClick(hit: HitObject): void {
 
 export function handleGhostbladeTeleportTargetClick(hit: HitObject): void {
   if (hit.userData.type !== 'square' && hit.userData.type !== 'base') {
-    addLog('Select an empty board square for Teleport.');
+    logHint('Select an empty board square for Teleport.');
     return;
   }
   const caster = getUnitById(state.ghostbladeTeleportCasterId!);
@@ -385,12 +386,12 @@ export function handleGhostbladeTeleportTargetClick(hit: HitObject): void {
     return;
   }
   if (caster.ghostbladeTeleportCooldown > 0) {
-    addLog('Teleport is on cooldown.');
+    logHint('Teleport is on cooldown.');
     return;
   }
   const currentPlayer = getCurrentPlayer();
   if (currentPlayer.energy < 10) {
-    addLog('Not enough Energy to use Teleport.');
+    logHint('Not enough Energy to use Teleport.');
     return;
   }
 
@@ -399,18 +400,18 @@ export function handleGhostbladeTeleportTargetClick(hit: HitObject): void {
     return;
   }
   if (getUnitAt(fromSquareKey(squareKey).x, fromSquareKey(squareKey).z)) {
-    addLog('Teleport target must be empty.');
+    logHint('Teleport target must be empty.');
     return;
   }
   const baseOwner = getBaseOwnerAtSquare(squareKey);
   if (baseOwner && baseOwner !== caster.owner) {
-    addLog('Teleport cannot target enemy base squares.');
+    logHint('Teleport cannot target enemy base squares.');
     return;
   }
   const enemyBuilding = getBuildingAtSquare(caster.owner === 'A' ? 'B' : 'A', squareKey);
   const ownBuilding = getBuildingAtSquare(caster.owner, squareKey);
   if (enemyBuilding || ownBuilding) {
-    addLog('Teleport target must not contain a building.');
+    logHint('Teleport target must not contain a building.');
     return;
   }
 
@@ -442,15 +443,15 @@ export function handleArtilleryAttackTargetClick(hit: HitObject): void {
     return;
   }
   if (!artillery.artillerySetUpActive) {
-    addLog('Artillery must have Set Up status to attack.');
+    logHint('Artillery must have Set Up status to attack.');
     return;
   }
   if (isUnitMovementStunned(artillery)) {
-    addLog('This Drone is Dazzled and cannot attack this turn.');
+    logHint('This Drone is Dazzled and cannot attack this turn.');
     return;
   }
   if (artillery.hasAttacked) {
-    addLog('This unit has already attacked this turn.');
+    logHint('This unit has already attacked this turn.');
     return;
   }
 
@@ -458,18 +459,18 @@ export function handleArtilleryAttackTargetClick(hit: HitObject): void {
   const hasBallistic = hasBallisticStatus(artillery);
   if (hasBallistic) {
     if (hit.userData.type !== 'unit' && hit.userData.type !== 'base') {
-      addLog('Ballistic targeting: select an enemy Drone or vulnerable enemy base square.');
+      logHint('Ballistic targeting: select an enemy Drone or vulnerable enemy base square.');
       return;
     }
     if (hit.userData.type === 'unit') {
       const targetUnit = getUnitById(hit.userData.unitId!);
       if (!targetUnit || targetUnit.owner === artillery.owner) {
-        addLog('Ballistic can target only enemy drones.');
+        logHint('Ballistic can target only enemy drones.');
         return;
       }
       const distance = getDistance(artillery.x, artillery.z, targetUnit.x, targetUnit.z);
       if (distance > artilleryRange) {
-        addLog(`Ballistic target out of range (${artilleryRange}).`);
+        logHint(`Ballistic target out of range (${artilleryRange}).`);
         return;
       }
       // Visual cue (client-only)
@@ -486,17 +487,17 @@ export function handleArtilleryAttackTargetClick(hit: HitObject): void {
     const targetBaseOwner = hit.userData.owner;
     const targetSquareKey = hit.userData.squareKey;
     if (!targetBaseOwner || !targetSquareKey || targetBaseOwner === artillery.owner) {
-      addLog('Ballistic can target only enemy base vulnerable squares.');
+      logHint('Ballistic can target only enemy base vulnerable squares.');
       return;
     }
     if (!BASE_ARTILLERY_FRONT_SQUARES[targetBaseOwner as PlayerId]?.has(targetSquareKey)) {
-      addLog('Ballistic can only target base vulnerable frontal squares.');
+      logHint('Ballistic can only target base vulnerable frontal squares.');
       return;
     }
     const sq = fromSquareKey(targetSquareKey);
     const distance = getDistance(artillery.x, artillery.z, sq.x, sq.z);
     if (distance > artilleryRange) {
-      addLog(`Ballistic base target out of range (${artilleryRange}).`);
+      logHint(`Ballistic base target out of range (${artilleryRange}).`);
       return;
     }
     playArtilleryShellShot(artillery.id, gridToWorld(sq.x, sq.z));
@@ -510,7 +511,7 @@ export function handleArtilleryAttackTargetClick(hit: HitObject): void {
   }
 
   if (hit.userData.type !== 'square' && hit.userData.type !== 'base') {
-    addLog('Select a target area for Artillery.');
+    logHint('Select a target area for Artillery.');
     return;
   }
 
@@ -518,7 +519,7 @@ export function handleArtilleryAttackTargetClick(hit: HitObject): void {
   if (hasGauss) {
     const lineKeys = getGaussLineSquareKeysFromTarget(artillery, hit.userData.squareKey!);
     if (lineKeys.length === 0) {
-      addLog('Gauss targeting: choose an adjacent square or one of its highlighted line squares.');
+      logHint('Gauss targeting: choose an adjacent square or one of its highlighted line squares.');
       return;
     }
     // Visual cues (client-only)
@@ -564,7 +565,7 @@ export function handleArtilleryAttackTargetClick(hit: HitObject): void {
     }
   }
   if (minDistanceToArea < 2) {
-    addLog('Attack: Shell cannot target areas closer than 2 squares to Artillery.');
+    logHint('Attack: Shell cannot target areas closer than 2 squares to Artillery.');
     return;
   }
 
@@ -611,7 +612,7 @@ export function handleArtilleryAttackTargetClick(hit: HitObject): void {
 
 export function handleSpecialistEmpTargetClick(hit: HitObject): void {
   if (hit.userData.type !== 'square' && hit.userData.type !== 'base') {
-    addLog('Select a target area for Specialist EMP.');
+    logHint('Select a target area for Specialist EMP.');
     return;
   }
   const specialist = getUnitById(state.specialistEmpCasterId!);
@@ -621,22 +622,22 @@ export function handleSpecialistEmpTargetClick(hit: HitObject): void {
     return;
   }
   if (specialist.specialistEmpCooldown > 0) {
-    addLog('EMP is on cooldown.');
+    logHint('EMP is on cooldown.');
     return;
   }
   const hasSalvo = hasSalvoEmpStatus(specialist);
   const empUsesThisTurn = specialist.specialistEmpUsesThisTurn ?? 0;
   if (hasSalvo && empUsesThisTurn >= 2) {
-    addLog('Salvo: this Specialist already used EMP twice this turn.');
+    logHint('Salvo: this Specialist already used EMP twice this turn.');
     return;
   }
   if (specialist.hasAttacked && !hasSalvo) {
-    addLog('Specialist cannot use EMP after attacking this turn.');
+    logHint('Specialist cannot use EMP after attacking this turn.');
     return;
   }
   const currentPlayer = getCurrentPlayer();
   if (currentPlayer.energy < 5) {
-    addLog('Not enough Energy to use EMP.');
+    logHint('Not enough Energy to use EMP.');
     return;
   }
 
@@ -644,7 +645,7 @@ export function handleSpecialistEmpTargetClick(hit: HitObject): void {
   const specialistRange = getUnitCurrentAttackRange(specialist);
   const nearestSquareDistance = getMinDistanceToAreaFromUnit(specialist.x, specialist.z, areaKeys);
   if (nearestSquareDistance > specialistRange) {
-    addLog(`EMP target area is out of range (${specialistRange}).`);
+    logHint(`EMP target area is out of range (${specialistRange}).`);
     return;
   }
 
@@ -683,7 +684,7 @@ export function handleSpecialistEmpTargetClick(hit: HitObject): void {
     speedMin: 1.0,
     speedMax: 2.2
   });
-  addLog(
+  logHint(
     `${specialist.owner} Specialist used EMP on ${areaKeys.join(', ')}.` +
       (hasSalvo ? ` (Salvo uses: ${specialist.specialistEmpUsesThisTurn}/2)` : '')
   );
@@ -700,7 +701,7 @@ export function handleSpecialistEmpTargetClick(hit: HitObject): void {
 
 export function handleCoreMagnetBulwarkTargetClick(hit: HitObject): void {
   if (hit.userData.type !== 'square' && hit.userData.type !== 'base') {
-    addLog('Select one adjacent square to aim Bulwark Core Magnet.');
+    logHint('Select one adjacent square to aim Bulwark Core Magnet.');
     return;
   }
   const unit = getSelectedUnit();
@@ -719,7 +720,7 @@ export function handleCoreMagnetBulwarkTargetClick(hit: HitObject): void {
   }
   const validTargets = new Set(getBulwarkAdjacentSquareKeys(unit));
   if (!validTargets.has(targetSquareKey)) {
-    addLog('Choose one of the 4 adjacent highlighted squares.');
+    logHint('Choose one of the 4 adjacent highlighted squares.');
     return;
   }
   activateBulwarkCoreMagnet(unit, targetSquareKey);
@@ -738,28 +739,28 @@ export function handleBuildingPlacementClick(hit: HitObject): void {
   }
 
   if (hit.userData.type !== 'square' && hit.userData.type !== 'base') {
-    addLog('Select one of your base squares to place the building.');
+    logHint('Select one of your base squares to place the building.');
     return;
   }
 
   const squareKey = hit.userData.squareKey;
   if (!squareKey) {
-    addLog('Select one of your base squares to place the building.');
+    logHint('Select one of your base squares to place the building.');
     return;
   }
   if (!isPlayerBaseSquare(currentPlayer.id, squareKey)) {
-    addLog('Building can only be placed on your base squares.');
+    logHint('Building can only be placed on your base squares.');
     return;
   }
 
   const square = fromSquareKey(squareKey);
   if (getUnitAt(square.x, square.z)) {
-    addLog('Building cannot be placed on an occupied square.');
+    logHint('Building cannot be placed on an occupied square.');
     return;
   }
 
   if (getBuildingAtSquare(currentPlayer.id, squareKey)) {
-    addLog('A building is already active on that base square.');
+    logHint('A building is already active on that base square.');
     return;
   }
 
@@ -772,7 +773,7 @@ export function handleBuildingPlacementClick(hit: HitObject): void {
   const statusPool = BUILDING_PERK_DRAFT_POOL[buildingCard.buildingType] ?? [];
 
   if (currentPlayer.supply < buildingCard.supplyCost) {
-    addLog('Not enough Supply to build this structure.');
+    logHint('Not enough Supply to build this structure.');
     return;
   }
 
@@ -840,12 +841,12 @@ export function handleBuildingPlacementClick(hit: HitObject): void {
   currentPlayer.supply -= buildingCard.supplyCost;
   const building = createBuilding(currentPlayer.id, buildingCard.buildingType, squareKey) as unknown as Building;
   if (building.type === 'DATACENTER') {
-    addLog(`Datacenter built: Player ${currentPlayer.id} max Energy increased by 5 (now ${getPlayerMaxEnergy(currentPlayer)}).`);
+    logHint(`Datacenter built: Player ${currentPlayer.id} max Energy increased by 5 (now ${getPlayerMaxEnergy(currentPlayer)}).`);
   }
   currentPlayer.buildingsPlayedThisTurn += 1;
   state.mode = 'idle';
   state.placingBuildingType = null;
-  addLog(`Player ${currentPlayer.id} built ${getBuildingDisplayName(building)} on ${squareKey}.`);
+  logHint(`Player ${currentPlayer.id} built ${getBuildingDisplayName(building)} on ${squareKey}.`);
   syncBoardVisualState();
   renderUI();
 }

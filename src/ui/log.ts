@@ -10,3 +10,11 @@ export function addLog(message: string): void {
     logEl.removeChild(logEl.lastChild!);
   }
 }
+
+/**
+ * Local UI hint — appends to the log panel without emitting a LOG event.
+ * Use for "Select an enemy unit first", "Not enough energy", "Out of range",
+ * etc. — feedback that's purely for the local user's input flow and must
+ * NEVER cross the network to the other client.
+ */
+export const logHint = addLog;

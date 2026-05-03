@@ -458,6 +458,176 @@ function updateFragments(dt: number): void {
   }
 }
 
+// --- monsters -------------------------------------------------------------
+
+interface MonsterTemplate {
+  scene: THREE.Object3D;        // raw gltf scene (cloned per spawn)
+  clips: THREE.AnimationClip[];
+  walkClipName?: string;        // pre-resolved walk clip name
+  scale: number;                // uniform scale to MONSTER_HEIGHT
+  baseY: number;                // y-shift so feet are at y=0 in template
+  centerXZ: { x: number; z: number };
+}
+
+let monsterTemplate: MonsterTemplate | null = null;
+
+interface Monster {
+  group: THREE.Object3D;
+  mixer: THREE.AnimationMixer;
+  walkAction: THREE.AnimationAction | null;
+  /** World-space foot position on the asteroid surface. */
+  position: THREE.Vector3;
+  alive: boolean;
+}
+
+const monsters: Monster[] = [];
+
+async function loadMonsterTemplate(): Promise<void> {
+  let gltf;
+  try { gltf = await loader.loadAsync(`${MODEL_BASE}monster.glb`); }
+  catch (e) { console.warn('[monster] load failed:', e); return; }
+
+  const root = gltf.scene;
+  const tmpRoot = new THREE.Group();
+  tmpRoot.add(root);
+  tmpRoot.updateMatrixWorld(true);
+  const bbox = meshOnlyBbox(tmpRoot);
+  const size = new THREE.Vector3(); bbox.getSize(size);
+  const center = new THREE.Vector3(); bbox.getCenter(center);
+  const targetH = MONSTER_HEIGHT;
+  const heightAxis = Math.max(size.x, size.y, size.z);
+  const scale = targetH / (heightAxis || 1);
+
+  // diagnostic: count meshes / skinned-meshes / materials in the template
+  let meshCount = 0, skinnedCount = 0, materialCount = 0;
+  root.traverse(c => {
+    const m = c as THREE.Mesh;
+    if (m.isMesh) {
+      meshCount++;
+      if ((m as unknown as THREE.SkinnedMesh).isSkinnedMesh) skinnedCount++;
+      if (m.material) materialCount++;
+    }
+  });
+
+  monsterTemplate = {
+    scene: root,
+    clips: gltf.animations,
+    walkClipName: gltf.animations.find(c => /walk|run|move/i.test(c.name))?.name
+                ?? gltf.animations[0]?.name,
+    scale,
+    baseY: -bbox.min.y,
+    centerXZ: { x: center.x, z: center.z },
+  };
+  console.log(`[monster] template loaded:
+  bbox: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)} (m, glb units)
+  center: ${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)}
+  scale: ${scale.toFixed(3)} → final height ${targetH}m
+  baseY shift: ${monsterTemplate.baseY.toFixed(2)}
+  meshes: ${meshCount} (skinned: ${skinnedCount}), materials: ${materialCount}
+  clips: [${gltf.animations.map(c => `${c.name}/${c.duration.toFixed(2)}s`).join(', ')}]
+  walk: "${monsterTemplate.walkClipName}"`);
+}
+
+function spawnMonster(dir: THREE.Vector3): void {
+  if (!monsterTemplate) return;
+  // SkeletonUtils.clone preserves the skeleton — plain clone() shares bones,
+  // which causes all monsters to animate in lockstep.
+  const inst = cloneSkeleton(monsterTemplate.scene) as THREE.Object3D;
+
+  // Hierarchy: wrap (world position + scale + lookAt rotation) ← inst.
+  // Centering offset sits on inst (in glb units, before scale). Putting the
+  // scale on the OUTER wrap makes the offset behave consistently regardless
+  // of the model's source unit (otherwise a non-1.0 scale shifts the feet).
+  inst.position.set(-monsterTemplate.centerXZ.x, monsterTemplate.baseY, -monsterTemplate.centerXZ.z);
+
+  const wrap = new THREE.Group();
+  wrap.add(inst);
+  wrap.scale.setScalar(monsterTemplate.scale);
+
+  // Place on surface immediately so the first frame doesn't show monsters
+  // bunched at world origin.
+  const surf = asteroidSurfacePoint(dir);
+  const position = surf ?? dir.clone().multiplyScalar(asteroidBoundingRadius);
+  wrap.position.copy(position);
+  wrap.up.copy(dir);
+  scene.add(wrap);
+
+  // DEBUG marker: bright red sphere at the monster's spawn point. If the
+  // user sees these but no zombies, the model is the issue (skeleton clone,
+  // material, animation collapse). If no markers either, the position
+  // calculation is wrong.
+  const marker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.6, 12, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff0000 }),
+  );
+  marker.position.copy(position).add(dir.clone().multiplyScalar(2)); // 2m above the surface
+  scene.add(marker);
+
+  const mixer = new THREE.AnimationMixer(inst);
+  let walkAction: THREE.AnimationAction | null = null;
+  if (monsterTemplate.walkClipName) {
+    const clip = monsterTemplate.clips.find(c => c.name === monsterTemplate!.walkClipName);
+    if (clip) {
+      walkAction = mixer.clipAction(clip);
+      walkAction.setLoop(THREE.LoopRepeat, Infinity);
+      walkAction.time = Math.random() * clip.duration;
+      walkAction.play();
+    }
+  }
+
+  monsters.push({ group: wrap, mixer, walkAction, position, alive: true });
+  console.log(`[monster] spawned at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`);
+}
+
+async function spawnInitialMonsters(): Promise<void> {
+  if (!monsterTemplate) return;
+  let placed = 0, attempts = 0;
+  while (placed < MONSTER_COUNT && attempts < MONSTER_COUNT * 4) {
+    attempts++;
+    const dir = new THREE.Vector3().randomDirection();
+    const surf = asteroidSurfacePoint(dir);
+    if (!surf) continue;
+    spawnMonster(dir);
+    placed++;
+  }
+  console.log(`[monster] spawned ${placed}/${MONSTER_COUNT}`);
+}
+
+function tickMonsters(dt: number): void {
+  for (const m of monsters) {
+    if (!m.alive) continue;
+    m.mixer.update(dt);
+
+    // Vector from monster's foot position toward player (world space)
+    const toPlayer = player.position.clone().sub(m.position);
+    const dist = toPlayer.length();
+
+    if (dist > MONSTER_TOUCH_DIST) {
+      // Project the to-player vector onto the local tangent plane (perp to
+      // monster's outward direction) so we walk along the surface.
+      const up = m.position.clone().normalize();
+      const tangent = toPlayer.clone().sub(up.clone().multiplyScalar(toPlayer.dot(up)));
+      if (tangent.lengthSq() > 1e-6) {
+        tangent.normalize();
+        m.position.addScaledVector(tangent, MONSTER_SPEED * dt);
+        // snap back to surface (table lookup is OK here — small inaccuracy
+        // doesn't matter for monsters)
+        const newUp = m.position.clone().normalize();
+        const r = getSurfaceRadius(newUp);
+        m.position.copy(newUp).multiplyScalar(r);
+      }
+    }
+
+    // Orient: stand up, face the player.
+    const stand = m.position.clone().normalize();
+    m.group.position.copy(m.position);
+    m.group.up.copy(stand);
+    // look toward player projected onto tangent plane
+    const lookTarget = m.position.clone().add(toPlayer);
+    m.group.lookAt(lookTarget);
+  }
+}
+
 // --- weapon (FPS rig glb with arms + animations) --------------------------
 
 interface WeaponState {
@@ -510,6 +680,11 @@ async function loadWeapon(): Promise<void> {
   // Default placement: a little right, a little down, in front of camera.
   // FPS rigs are usually authored facing -Z already, so no rotation by default.
   wrap.position.set(0.0, -0.15, -0.45);
+  // Camera-attached meshes are culled with their LOCAL bounding sphere against
+  // the world frustum, which can flicker when the bounds straddle the near
+  // plane during head-bob / movement. Force everything in this rig to skip the
+  // culling check so it renders every frame.
+  wrap.traverse(c => { c.frustumCulled = false; });
   camera.add(wrap);
 
   // animations
@@ -554,6 +729,7 @@ const flashSprite = new THREE.Sprite(new THREE.SpriteMaterial({
 flashSprite.scale.set(0.4, 0.4, 0.4);
 flashSprite.position.set(0, -0.05, -0.7);
 flashSprite.visible = false;
+flashSprite.frustumCulled = false;
 camera.add(flashSprite);
 
 let flashTime = 0;
@@ -580,8 +756,7 @@ function attack(): void {
     a.reset().play();
   }
 
-  // raycast against rocks
-  if (!rockInstanced) return;
+  // raycast against rocks AND monsters; pick the closer hit.
   const origin = new THREE.Vector3();
   camera.getWorldPosition(origin);
   const dir = new THREE.Vector3();
@@ -589,11 +764,43 @@ function attack(): void {
   raycaster.set(origin, dir);
   raycaster.far = FIRE_RANGE;
 
-  const hits = raycaster.intersectObject(rockInstanced, false);
-  if (hits.length > 0 && hits[0].instanceId != null) {
-    const target = rocks.find(r => r.slot === hits[0].instanceId && r.alive);
-    if (target) shatterRock(target, hits[0].point);
+  // collect potential targets
+  const targets: THREE.Object3D[] = [];
+  if (rockInstanced) targets.push(rockInstanced);
+  for (const m of monsters) if (m.alive) targets.push(m.group);
+
+  const hits = raycaster.intersectObjects(targets, true);
+  if (hits.length === 0) return;
+  const hit = hits[0];
+
+  // Was the hit on the rock InstancedMesh?
+  if (hit.object === rockInstanced && hit.instanceId != null) {
+    const target = rocks.find(r => r.slot === hit.instanceId && r.alive);
+    if (target) shatterRock(target, hit.point);
+    return;
   }
+  // Otherwise, walk up the hit's parent chain to find which monster it belongs to.
+  let node: THREE.Object3D | null = hit.object;
+  while (node) {
+    const m = monsters.find(x => x.group === node);
+    if (m) {
+      killMonster(m);
+      return;
+    }
+    node = node.parent;
+  }
+}
+
+function killMonster(m: Monster): void {
+  if (!m.alive) return;
+  m.alive = false;
+  // simple "death": tip over and fade out via opacity.
+  // For now, just remove from scene immediately.
+  scene.remove(m.group);
+  m.group.traverse(c => {
+    const mesh = c as THREE.Mesh;
+    if (mesh.isMesh && mesh.geometry) mesh.geometry.dispose();
+  });
 }
 
 // --- player ---------------------------------------------------------------
@@ -759,7 +966,7 @@ async function renderCredits(): Promise<void> {
     const res = await fetch(`${MODEL_BASE}CREDITS.json`);
     if (!res.ok) return;
     const all: CreditsEntry[] = await res.json();
-    const used = all.filter(c => ['asteroid', 'rock', 'fps_rifle'].includes(c.slug));
+    const used = all.filter(c => ['asteroid', 'rock', 'fps_rifle', 'monster'].includes(c.slug));
     if (used.length === 0) return;
     const escapeHtml = (s: string) =>
       s.replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]!));
@@ -782,6 +989,7 @@ function animate(): void {
   try {
     const dt = Math.min(clock.getDelta(), 0.05);
     tickPlayer(dt);
+    tickMonsters(dt);
     updateWeapon(dt);
     updateFragments(dt);
 
@@ -791,7 +999,8 @@ function animate(): void {
     }
 
     const aliveRocks = rocks.filter(r => r.alive).length;
-    infoEl.textContent = `rocks: ${aliveRocks}/${rocks.length}  ·  fragments: ${fragments.length}  ·  alt: ${(player.position.length() - asteroidBoundingRadius).toFixed(2)}`;
+    const aliveMonsters = monsters.filter(m => m.alive).length;
+    infoEl.textContent = `monsters: ${aliveMonsters}/${monsters.length}  ·  rocks: ${aliveRocks}/${rocks.length}  ·  fragments: ${fragments.length}  ·  alt: ${(player.position.length() - asteroidBoundingRadius).toFixed(2)}`;
 
     renderer.render(scene, camera);
   } catch (e) {
@@ -801,15 +1010,24 @@ function animate(): void {
 
 // --- bootstrap ------------------------------------------------------------
 
+async function step(label: string, fn: () => Promise<unknown> | unknown): Promise<void> {
+  try {
+    console.log(`[boot] ${label} ...`);
+    await fn();
+    console.log(`[boot] ${label} OK`);
+  } catch (e) {
+    console.error(`[boot] ${label} FAILED:`, e);
+  }
+}
+
 (async () => {
   renderCredits();
-  await loadAsteroid();
-  buildSurfaceTable();
-
-  // Drop player above the highest point of the asteroid; gravity will land them.
+  await step('loadAsteroid', loadAsteroid);
+  await step('buildSurfaceTable', () => buildSurfaceTable());
   player.position.set(0, asteroidBoundingRadius * 1.2, 0);
-
-  await loadAndScatterRocks();
-  await loadWeapon();
+  await step('loadAndScatterRocks', loadAndScatterRocks);
+  await step('loadMonsterTemplate', loadMonsterTemplate);
+  await step('spawnInitialMonsters', spawnInitialMonsters);
+  await step('loadWeapon', loadWeapon);
   animate();
 })();

@@ -31,7 +31,7 @@ import {
   getBuildingCardUpgradeIconsHtml,
   getBuildingAbilityCardsHtml,
 } from './uiHelpers.ts';
-import { addLog } from '../shared/events.ts';
+import { logHint } from './log.ts';
 import {
   getUnitCurrentMoveRange,
   getUnitCurrentAttackRange,
@@ -1510,17 +1510,17 @@ export function renderUI(): void {
         return;
       }
       if (isUnitMovementStunned(unit)) {
-        addLog('This Drone is Dazzled and cannot attack this turn.');
+        logHint('This Drone is Dazzled and cannot attack this turn.');
         return;
       }
       const tankFaceEaterCooldown = getTankFaceEaterAttackCooldown(unit);
       if (tankFaceEaterCooldown > 0) {
-        addLog(`Face-Eater attack cooldown: ${tankFaceEaterCooldown} turn(s) remaining.`);
+        logHint(`Face-Eater attack cooldown: ${tankFaceEaterCooldown} turn(s) remaining.`);
         return;
       }
       if (unit.unitTypeId === 'ARTILLERY_UNIT') {
         if (!unit.artillerySetUpActive) {
-          addLog('Artillery needs Set Up status before attacking.');
+          logHint('Artillery needs Set Up status before attacking.');
           return;
         }
         state.mode = 'artillery_attack_targeting';
@@ -1543,16 +1543,16 @@ export function renderUI(): void {
         return;
       }
       if (isUnitMovementStunned(unit)) {
-        addLog('This Drone is Dazzled and cannot use abilities this turn.');
+        logHint('This Drone is Dazzled and cannot use abilities this turn.');
         return;
       }
       const beacon = hasBeaconCoreMagnet(unit);
       if (!beacon && unit.coreMagnetTurnsLeft > 0) {
-        addLog('Core Magnet is already active on this Tank Drone.');
+        logHint('Core Magnet is already active on this Tank Drone.');
         return;
       }
       if (!beacon && unit.coreMagnetCooldown > 0) {
-        addLog('Core Magnet is on cooldown.');
+        logHint('Core Magnet is on cooldown.');
         return;
       }
       if (beacon && unit.coreMagnetTurnsLeft > 0) {
@@ -1580,7 +1580,7 @@ export function renderUI(): void {
         return;
       }
       if (unitHasStatus(unit, DRONE_STATUS_LIBRARY.BULWARK.id)) {
-        addLog('Bulwark Core Magnet is activated by choosing an adjacent square.');
+        logHint('Bulwark Core Magnet is activated by choosing an adjacent square.');
         return;
       }
       activateCoreMagnet(unit);
@@ -1619,11 +1619,11 @@ export function renderUI(): void {
         return;
       }
       if (unit.ghostbladeTeleportCooldown > 0) {
-        addLog('Teleport is on cooldown.');
+        logHint('Teleport is on cooldown.');
         return;
       }
       if (getCurrentPlayer().energy < 10) {
-        addLog('Not enough Energy to use Teleport.');
+        logHint('Not enough Energy to use Teleport.');
         return;
       }
       state.mode = 'ghostblade_teleport_targeting';
@@ -1654,19 +1654,19 @@ export function renderUI(): void {
         return;
       }
       if (unit.specialistEmpCooldown > 0) {
-        addLog('EMP is on cooldown.');
+        logHint('EMP is on cooldown.');
         return;
       }
       if (hasSalvoEmpStatus(unit) && (unit.specialistEmpUsesThisTurn ?? 0) >= 2) {
-        addLog('Salvo: this Specialist already used EMP twice this turn.');
+        logHint('Salvo: this Specialist already used EMP twice this turn.');
         return;
       }
       if (unit.hasAttacked && !hasSalvoEmpStatus(unit)) {
-        addLog('Specialist cannot use EMP after attacking this turn.');
+        logHint('Specialist cannot use EMP after attacking this turn.');
         return;
       }
       if (getCurrentPlayer().energy < 5) {
-        addLog('Not enough Energy to use EMP.');
+        logHint('Not enough Energy to use EMP.');
         return;
       }
       state.mode = 'specialist_emp_targeting';
@@ -1721,11 +1721,11 @@ export function renderProcessEchoPanels(currentPlayer: Player): void {
 
         if (slot === 'X') {
           if (state.mode !== 'system_shock_card' && state.mode !== 'shielding_card' && state.mode !== 'shimmering_card') {
-            addLog('Cards in X cannot be played this turn unless the card says otherwise.');
+            logHint('Cards in X cannot be played this turn unless the card says otherwise.');
             return;
           }
           if (state.selectedCardHandIndex === null) {
-            addLog('Select a storable Perk card first.');
+            logHint('Select a storable Perk card first.');
             return;
           }
           const selectedCard = currentPlayer.hand[state.selectedCardHandIndex];
@@ -1735,32 +1735,32 @@ export function renderProcessEchoPanels(currentPlayer: Player): void {
               selectedCard.cardId !== CARD_LIBRARY.SHIELDING.id &&
               selectedCard.cardId !== CARD_LIBRARY.SHIMMERING_CLOAK.id)
           ) {
-            addLog('Select a storable Perk card first.');
+            logHint('Select a storable Perk card first.');
             return;
           }
           if (echo.X) {
             currentPlayer.discard.push(echo.X);
-            addLog(`Player ${currentPlayer.id} replaced the card in Process Echo X. Old card moved to discard.`);
+            logHint(`Player ${currentPlayer.id} replaced the card in Process Echo X. Old card moved to discard.`);
           }
           echo.X = selectedCard;
           currentPlayer.hand.splice(state.selectedCardHandIndex, 1);
-          addLog(`Player ${currentPlayer.id} stored ${CARD_LIBRARY[selectedCard.cardId].cardName} in Process Echo X.`);
+          logHint(`Player ${currentPlayer.id} stored ${CARD_LIBRARY[selectedCard.cardId].cardName} in Process Echo X.`);
           clearSelection();
           renderUI();
           return;
         }
 
         if (!hasCard) {
-          addLog(`Process Echo slot ${slot} is empty.`);
+          logHint(`Process Echo slot ${slot} is empty.`);
           return;
         }
         if (currentPlayer.processEchoPlayedThisTurn) {
-          addLog('You can play only one card from Process Echo per turn.');
+          logHint('You can play only one card from Process Echo per turn.');
           return;
         }
         const level = Number.parseInt(slot, 10);
         if (!Number.isFinite(level) || level < 1 || level > 3) {
-          addLog('This Process Echo slot is not playable yet.');
+          logHint('This Process Echo slot is not playable yet.');
           return;
         }
         if (!slotCard) {
@@ -1794,7 +1794,7 @@ export function renderProcessEchoPanels(currentPlayer: Player): void {
           state.pendingShieldingLevel = null;
           state.pendingShieldingSourceSlot = null;
         } else {
-          addLog('This Process Echo card cannot be played.');
+          logHint('This Process Echo card cannot be played.');
           return;
         }
         state.selectedCardHandIndex = null;
