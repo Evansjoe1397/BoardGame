@@ -42,6 +42,21 @@ export function applyEvent(event: GameEvent): void {
   if (h) h(event);
 }
 
+/**
+ * UI_REFRESH and BOARD_SYNC are coarse "redraw the world" signals — they
+ * carry no payload and are idempotent within a single drained batch. The
+ * engine emits them liberally (one per mutation), so deduping before
+ * dispatch turns N full-DOM rebuilds per turn into one. Other events keep
+ * their original ordering.
+ */
 export function applyEvents(events: GameEvent[]): void {
-  for (const event of events) applyEvent(event);
+  let pendingRefresh = false;
+  let pendingSync = false;
+  for (const event of events) {
+    if (event.type === 'UI_REFRESH') { pendingRefresh = true; continue; }
+    if (event.type === 'BOARD_SYNC') { pendingSync = true; continue; }
+    applyEvent(event);
+  }
+  if (pendingSync) applyEvent({ type: 'BOARD_SYNC' });
+  if (pendingRefresh) applyEvent({ type: 'UI_REFRESH' });
 }

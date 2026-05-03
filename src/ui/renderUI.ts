@@ -832,16 +832,16 @@ export function renderUI(): void {
 
   pileAEl.innerHTML = `
     <div class="pile-title">Player A</div>
-    <div class="pile-resource">Energy: <strong>${playerA.energy}/${playerAMaxEnergy}</strong></div>
-    <div class="pile-resource">Supply: <strong>${playerA.supply}</strong></div>
+    <div class="pile-resource" data-energy>Energy: <strong>${playerA.energy}/${playerAMaxEnergy}</strong></div>
+    <div class="pile-resource" data-supply>Supply: ${playerA.supply}</div>
     <div>Deck: ${playerA.deck.length}</div>
     <div>Discard: ${playerA.discard.length}</div>
   `;
 
   pileBEl.innerHTML = `
     <div class="pile-title">Player B</div>
-    <div class="pile-resource">Energy: <strong>${playerB.energy}/${playerBMaxEnergy}</strong></div>
-    <div class="pile-resource">Supply: <strong>${playerB.supply}</strong></div>
+    <div class="pile-resource" data-energy>Energy: <strong>${playerB.energy}/${playerBMaxEnergy}</strong></div>
+    <div class="pile-resource" data-supply>Supply: ${playerB.supply}</div>
     <div>Deck: ${playerB.deck.length}</div>
     <div>Discard: ${playerB.discard.length}</div>
   `;
