@@ -128,5 +128,15 @@
     "source": "https://sketchfab.com/3d-models/none-ca8cb5485de84c4ea4642240ea8307fc",
     "faceCount": 19904,
     "bytes": 5136992
+  },
+  {
+    "slug": "flier",
+    "uid": "b3b83f40265347dd90e4666c3e2a843c",
+    "name": "Wyvern",
+    "author": "DibArts",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-b3b83f40265347dd90e4666c3e2a843c",
+    "faceCount": 1154,
+    "bytes": 223472
   }
 ]

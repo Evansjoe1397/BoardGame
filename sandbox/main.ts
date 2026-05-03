@@ -20,7 +20,7 @@ import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.j
 
 // --- constants ------------------------------------------------------------
 
-const TARGET_PLANET_DIAMETER = 80;  // longest bbox dim of asteroid scaled to this many metres
+const TARGET_PLANET_DIAMETER = 160;  // longest bbox dim of asteroid scaled to this many metres
 const GRAVITY = 18;
 const EYE_HEIGHT = 1.7;
 const PLAYER_RADIUS = 0.4;
@@ -30,10 +30,25 @@ const JUMP_SPEED = 9;
 const MOUSE_SENS = 0.0022;
 const PITCH_LIMIT = Math.PI / 2 - 0.05;
 const ROCK_COUNT = 50;
-const MONSTER_COUNT = 8;
-const MONSTER_SPEED = 2.2;       // m/s along the surface
-const MONSTER_HEIGHT = 1.8;      // target height in metres after scaling
-const MONSTER_TOUCH_DIST = 1.4;  // when within this, monster stops (touched player)
+const MONSTER_INITIAL = 6;
+const MONSTER_MAX_ALIVE = 50;
+const MONSTER_SPAWN_INTERVAL = 2.0;     // seconds between trickle spawns
+const MONSTER_SPAWN_PLAYER_DOT = 0.6;   // reject spawn dirs within ~53° of player view (avoid pop-in)
+const MONSTER_SPEED = 2.2;       // m/s along the surface (walkers)
+const MONSTER_HEIGHT = 1.8;      // walker target height in metres after scaling
+const MONSTER_TOUCH_DIST = 1.4;  // when within this, walker stops (touched player)
+const FLIER_HEIGHT = 1.6;        // flier target size (longest axis) in metres
+const FLIER_HOVER_DIST = 14;     // engage at this many metres horizontally from player
+const FLIER_HOVER_ALT = 8;       // hover this high above local surface
+const FLIER_SPEED = 4;           // m/s
+const FLIER_FIRE_INTERVAL = 2.4; // seconds between projectile shots
+const FLIER_PROJECTILE_SPEED = 18; // m/s
+const FLIER_FIRE_RANGE = 35;     // start firing inside this distance
+const FLIER_SPAWN_FRACTION = 0.35; // ~35% of trickle-spawns are fliers
+const PROJECTILE_HIT_DIST = 1.4; // player gets hit if a projectile passes within
+// HP per kind. Walkers tankier than fliers.
+const WALKER_MAX_HP = 4;
+const FLIER_MAX_HP = 2;
 
 const MODEL_BASE = '/sandbox/models/';
 
@@ -492,6 +507,112 @@ function updateDamageFlash(dt: number): void {
   }
 }
 
+// --- HP bar (canvas-textured sprite) --------------------------------------
+
+const HP_BAR_W = 0.9;
+const HP_BAR_H = 0.12;
+
+function drawHpBar(canvas: HTMLCanvasElement, ratio: number): void {
+  const ctx = canvas.getContext('2d')!;
+  const w = canvas.width, h = canvas.height;
+  // background
+  ctx.fillStyle = 'rgba(15,18,28,0.85)';
+  ctx.fillRect(0, 0, w, h);
+  // border
+  ctx.strokeStyle = '#cfd8e3';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, w - 2, h - 2);
+  // fill
+  let color = '#33cc44';
+  if (ratio <= 0.66) color = '#ffa030';
+  if (ratio <= 0.33) color = '#dd2222';
+  ctx.fillStyle = color;
+  const fillW = Math.max(0, Math.min(w - 6, (w - 6) * ratio));
+  ctx.fillRect(3, 3, fillW, h - 6);
+}
+
+function makeHpBar(): { sprite: THREE.Sprite; canvas: HTMLCanvasElement; texture: THREE.CanvasTexture } {
+  const canvas = document.createElement('canvas');
+  canvas.width = 192;
+  canvas.height = 28;
+  drawHpBar(canvas, 1);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({
+    map: texture,
+    depthTest: false,
+    transparent: true,
+  });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(HP_BAR_W, HP_BAR_H, 1);
+  sprite.renderOrder = 999; // on top of world
+  return { sprite, canvas, texture };
+}
+
+// --- plasma projectiles (fired by fliers) --------------------------------
+
+interface Projectile {
+  mesh: THREE.Mesh;
+  light: THREE.PointLight;
+  velocity: THREE.Vector3;
+  life: number;
+  maxLife: number;
+}
+
+const projectiles: Projectile[] = [];
+
+function fireProjectile(from: THREE.Vector3, target: THREE.Vector3): void {
+  const dir = target.clone().sub(from).normalize();
+  const geom = new THREE.SphereGeometry(0.30, 14, 10);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x88c8ff,
+    emissive: 0x4080ff,
+    emissiveIntensity: 2.0,
+    roughness: 0.25,
+    metalness: 0,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.copy(from);
+  scene.add(mesh);
+
+  const light = new THREE.PointLight(0x60a0ff, 2.0, 6, 1.5);
+  mesh.add(light);
+
+  projectiles.push({
+    mesh, light,
+    velocity: dir.multiplyScalar(FLIER_PROJECTILE_SPEED),
+    life: 0,
+    maxLife: 4.0,
+  });
+}
+
+function disposeProjectile(p: Projectile): void {
+  scene.remove(p.mesh);
+  p.mesh.geometry.dispose();
+  (p.mesh.material as THREE.Material).dispose();
+}
+
+function tickProjectiles(dt: number): void {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    p.mesh.position.addScaledVector(p.velocity, dt);
+    p.life += dt;
+
+    // collision with player
+    const dist = p.mesh.position.distanceTo(player.position);
+    if (dist < PROJECTILE_HIT_DIST) {
+      flashDamage();
+      disposeProjectile(p);
+      projectiles.splice(i, 1);
+      continue;
+    }
+    if (p.life >= p.maxLife) {
+      disposeProjectile(p);
+      projectiles.splice(i, 1);
+    }
+  }
+}
+
 // --- monsters -------------------------------------------------------------
 
 interface MonsterVariant {
@@ -511,10 +632,13 @@ interface MonsterTemplate {
 }
 
 let monsterTemplate: MonsterTemplate | null = null;
+let flierTemplate: MonsterTemplate | null = null;
 
+type MonsterKind = 'walker' | 'flier';
 type MonsterState = 'walking' | 'attacking' | 'dying';
 
 interface Monster {
+  kind: MonsterKind;
   group: THREE.Object3D;
   mixer: THREE.AnimationMixer;
   walkAction: THREE.AnimationAction | null;
@@ -522,9 +646,19 @@ interface Monster {
   deathAction: THREE.AnimationAction | null;
   state: MonsterState;
   attackCooldown: number;
+  fireCooldown: number;          // fliers only
+  hp: number;
+  maxHp: number;
+  hpBar: THREE.Sprite;
+  hpBarCanvas: HTMLCanvasElement;
+  hpBarTexture: THREE.CanvasTexture;
+  hpRatioDrawn: number;          // last drawn ratio; only redraw on change
   /** Time remaining in the death animation before despawn (0 = not dying). */
   dyingTimer: number;
-  /** World-space foot position on the asteroid surface. */
+  /**
+   * For walkers: foot position on the asteroid surface.
+   * For fliers: the wyvern's body position in space (above the surface).
+   */
   position: THREE.Vector3;
   alive: boolean;
 }
@@ -532,94 +666,70 @@ interface Monster {
 const monsters: Monster[] = [];
 
 async function loadMonsterTemplate(): Promise<void> {
+  monsterTemplate = await loadCreatureTemplate('monster.glb', MONSTER_HEIGHT, 'walker');
+  flierTemplate  = await loadCreatureTemplate('flier.glb',   FLIER_HEIGHT,   'flier');
+}
+
+async function loadCreatureTemplate(
+  filename: string,
+  targetHeight: number,
+  label: string,
+): Promise<MonsterTemplate | null> {
   let gltf;
-  try { gltf = await loader.loadAsync(`${MODEL_BASE}monster.glb`); }
-  catch (e) { console.warn('[monster] load failed:', e); return; }
+  try { gltf = await loader.loadAsync(`${MODEL_BASE}${filename}`); }
+  catch (e) { console.warn(`[${label}] load failed:`, e); return null; }
 
   const root = gltf.scene;
 
-  // Pack-aware variant detection:
-  // A "pack" glb often nests ALL zombies under a single root group (sometimes
-  // alongside a base platform mesh). Splitting by top-level children only
-  // gives us one giant clump.
-  // Instead, locate every SkinnedMesh in the scene, then for each one walk
-  // UP the ancestry chain until we hit an ancestor that contains *more than
-  // one* SkinnedMesh — that's the pack boundary. The previous (single-skinned)
-  // ancestor is the per-zombie root. This way each zombie's own armature +
-  // bones + mesh come along together, and the platform mesh is excluded.
-  const skinnedMeshes: THREE.Object3D[] = [];
-  root.traverse(c => { if ((c as THREE.SkinnedMesh).isSkinnedMesh) skinnedMeshes.push(c); });
+  // Use the whole scene as a single variant. This works for single-character
+  // glbs (which is what we're using). Pack splitting was attempted earlier
+  // but breaks when a single combined animation references bones from
+  // multiple characters — extracting one character leaves clip tracks that
+  // can't bind, then three's mixer chokes on undefined node references.
+  const variantNodes: THREE.Object3D[] = [root];
 
-  const variantNodes: THREE.Object3D[] = [];
-  if (skinnedMeshes.length > 0) {
-    const seen = new Set<THREE.Object3D>();
-    for (const sm of skinnedMeshes) {
-      let candidate: THREE.Object3D = sm;
-      let parent: THREE.Object3D | null = sm.parent;
-      while (parent && parent !== root) {
-        let cnt = 0;
-        parent.traverse(c => { if ((c as THREE.SkinnedMesh).isSkinnedMesh) cnt++; });
-        if (cnt > 1) break;       // found the pack — stop one level below
-        candidate = parent;
-        parent = parent.parent;
-      }
-      if (!seen.has(candidate)) { seen.add(candidate); variantNodes.push(candidate); }
-    }
-  } else {
-    // No skinning at all — fall back to top-level mesh-bearing children.
-    for (const child of root.children) {
-      let hasMesh = false;
-      child.traverse(c => { if ((c as THREE.Mesh).isMesh) hasMesh = true; });
-      if (hasMesh) variantNodes.push(child);
-    }
-  }
-  if (variantNodes.length === 0) variantNodes.push(root); // last-resort fallback
-
-  // For each variant, compute its own bbox/scale/center so packs with
-  // different-sized zombies all normalise to MONSTER_HEIGHT.
+  // Compute bbox/scale/center for each variant (just the one for now).
   const variants: MonsterVariant[] = [];
   for (const node of variantNodes) {
-    const tmp = new THREE.Group();
-    tmp.add(node);
-    tmp.updateMatrixWorld(true);
-    const bbox = meshOnlyBbox(tmp);
+    node.updateMatrixWorld(true);
+    const bbox = meshOnlyBbox(node);
     if (bbox.isEmpty()) continue;
     const size = new THREE.Vector3(); bbox.getSize(size);
     const center = new THREE.Vector3(); bbox.getCenter(center);
     const heightAxis = Math.max(size.x, size.y, size.z);
-    const scale = MONSTER_HEIGHT / (heightAxis || 1);
+    const scale = targetHeight / (heightAxis || 1);
     variants.push({
       root: node,
       scale,
       baseY: -bbox.min.y,
       centerXZ: { x: center.x, z: center.z },
     });
-    // re-attach to original root so SkeletonUtils.clone walks the right tree
-    root.add(node);
   }
 
-  monsterTemplate = {
+  const tpl: MonsterTemplate = {
     variants,
     clips: gltf.animations,
-    walkClipName: gltf.animations.find(c => /walk|run|move/i.test(c.name))?.name
+    walkClipName: gltf.animations.find(c => /walk|run|move|fly|hover/i.test(c.name))?.name
                 ?? gltf.animations[0]?.name,
-    attackClipName: gltf.animations.find(c => /attack|swing|hit|bite|claw|punch/i.test(c.name))?.name,
+    attackClipName: gltf.animations.find(c => /attack|swing|hit|bite|claw|punch|fire|shoot/i.test(c.name))?.name,
     deathClipName:  gltf.animations.find(c => /die|death|dead|fall|kill/i.test(c.name))?.name,
   };
-  console.log(`[monster] template loaded:
+  console.log(`[${label}] template loaded:
   variants: ${variants.length}
   scales: [${variants.map(v => v.scale.toFixed(2)).join(', ')}]
   clips: [${gltf.animations.map(c => `${c.name}/${c.duration.toFixed(2)}s`).join(', ')}]
-  walk:   "${monsterTemplate.walkClipName}"
-  attack: "${monsterTemplate.attackClipName}"
-  death:  "${monsterTemplate.deathClipName}"`);
+  walk:   "${tpl.walkClipName}"
+  attack: "${tpl.attackClipName}"
+  death:  "${tpl.deathClipName}"`);
+  return tpl;
 }
 
-function spawnMonster(dir: THREE.Vector3): void {
-  if (!monsterTemplate || monsterTemplate.variants.length === 0) return;
+function spawnMonster(dir: THREE.Vector3, kind: MonsterKind = 'walker'): void {
+  const tpl = kind === 'flier' ? flierTemplate : monsterTemplate;
+  if (!tpl || tpl.variants.length === 0) return;
 
   // Pick a random variant from the pack.
-  const variant = monsterTemplate.variants[Math.floor(Math.random() * monsterTemplate.variants.length)];
+  const variant = tpl.variants[Math.floor(Math.random() * tpl.variants.length)];
 
   // SkeletonUtils.clone preserves the skeleton — plain clone() shares bones,
   // which causes all monsters to animate in lockstep.
@@ -669,19 +779,21 @@ function spawnMonster(dir: THREE.Vector3): void {
     }
   });
 
-  // Place on surface immediately so the first frame doesn't show monsters
-  // bunched at world origin.
+  // Initial position: walkers on surface, fliers a bit above the surface.
   const surf = asteroidSurfacePoint(dir);
-  const position = surf ?? dir.clone().multiplyScalar(asteroidBoundingRadius);
+  const surfacePoint = surf ?? dir.clone().multiplyScalar(asteroidBoundingRadius);
+  const surfaceUp = surfacePoint.clone().normalize();
+  const position = kind === 'flier'
+    ? surfacePoint.clone().addScaledVector(surfaceUp, FLIER_HOVER_ALT * 1.4) // start above hover altitude, glides down
+    : surfacePoint;
   wrap.position.copy(position);
-  wrap.up.copy(dir);
+  wrap.up.copy(surfaceUp);
   scene.add(wrap);
-
 
   const mixer = new THREE.AnimationMixer(inst);
   let walkAction: THREE.AnimationAction | null = null;
-  if (monsterTemplate.walkClipName) {
-    const clip = monsterTemplate.clips.find(c => c.name === monsterTemplate!.walkClipName);
+  if (tpl.walkClipName) {
+    const clip = tpl.clips.find(c => c.name === tpl.walkClipName);
     if (clip) {
       walkAction = mixer.clipAction(clip);
       walkAction.setLoop(THREE.LoopRepeat, Infinity);
@@ -690,24 +802,34 @@ function spawnMonster(dir: THREE.Vector3): void {
     }
   }
 
+  // HP bar (sprite, world-space; positioned each frame above the body)
+  const { sprite: hpBar, canvas: hpBarCanvas, texture: hpBarTexture } = makeHpBar();
+  scene.add(hpBar);
+
+  const maxHp = kind === 'flier' ? FLIER_MAX_HP : WALKER_MAX_HP;
   monsters.push({
+    kind,
     group: wrap, mixer,
     walkAction,
     attackAction: null,
     deathAction: null,
     state: 'walking',
     attackCooldown: 0,
+    fireCooldown: kind === 'flier' ? 1.5 + Math.random() * 1.5 : 0,
+    hp: maxHp,
+    maxHp,
+    hpBar, hpBarCanvas, hpBarTexture,
+    hpRatioDrawn: 1,
     dyingTimer: 0,
     position,
     alive: true,
   });
-  console.log(`[monster] spawned at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`);
 }
 
 async function spawnInitialMonsters(): Promise<void> {
   if (!monsterTemplate) return;
   let placed = 0, attempts = 0;
-  while (placed < MONSTER_COUNT && attempts < MONSTER_COUNT * 4) {
+  while (placed < MONSTER_INITIAL && attempts < MONSTER_INITIAL * 4) {
     attempts++;
     const dir = new THREE.Vector3().randomDirection();
     const surf = asteroidSurfacePoint(dir);
@@ -715,7 +837,42 @@ async function spawnInitialMonsters(): Promise<void> {
     spawnMonster(dir);
     placed++;
   }
-  console.log(`[monster] spawned ${placed}/${MONSTER_COUNT}`);
+  console.log(`[monster] initial spawn ${placed}/${MONSTER_INITIAL}`);
+}
+
+/**
+ * Trickle-spawn new monsters over time up to MONSTER_MAX_ALIVE. Random
+ * direction, but rejected if it would pop in front of the player. Mix of
+ * walkers and fliers controlled by FLIER_SPAWN_FRACTION.
+ */
+let spawnAccumulator = 0;
+function tickMonsterSpawner(dt: number): void {
+  if (!monsterTemplate && !flierTemplate) return;
+  spawnAccumulator += dt;
+  if (spawnAccumulator < MONSTER_SPAWN_INTERVAL) return;
+  spawnAccumulator = 0;
+
+  const aliveCount = monsters.filter(m => m.alive).length;
+  if (aliveCount >= MONSTER_MAX_ALIVE) return;
+
+  const camForward = new THREE.Vector3();
+  camera.getWorldDirection(camForward);
+  let dir: THREE.Vector3 | null = null;
+  for (let i = 0; i < 16; i++) {
+    const candidate = new THREE.Vector3().randomDirection();
+    const spawnPoint = candidate.clone().normalize().multiplyScalar(asteroidBoundingRadius);
+    const toSpawn = spawnPoint.sub(player.position).normalize();
+    if (toSpawn.dot(camForward) < MONSTER_SPAWN_PLAYER_DOT) {
+      dir = candidate;
+      break;
+    }
+  }
+  if (!dir) return;
+
+  // Pick walker vs flier — bias toward walkers; only spawn flier if its
+  // template loaded successfully.
+  const wantFlier = flierTemplate && Math.random() < FLIER_SPAWN_FRACTION;
+  spawnMonster(dir, wantFlier ? 'flier' : 'walker');
 }
 
 const ATTACK_RANGE = 1.6;        // start attacking when within this distance
@@ -747,17 +904,22 @@ function setMonsterState(m: Monster, state: MonsterState): void {
   }
 }
 
+function templateFor(m: Monster): MonsterTemplate | null {
+  return m.kind === 'flier' ? flierTemplate : monsterTemplate;
+}
+
 function tickMonsters(dt: number): void {
   for (let i = monsters.length - 1; i >= 0; i--) {
     const m = monsters[i];
+    const tpl = templateFor(m);
 
-    // Lazy-bind attack/death actions (template may not have been read until now)
-    if (!m.attackAction && monsterTemplate?.attackClipName) {
-      const clip = monsterTemplate.clips.find(c => c.name === monsterTemplate!.attackClipName);
+    // Lazy-bind attack/death actions
+    if (!m.attackAction && tpl?.attackClipName) {
+      const clip = tpl.clips.find(c => c.name === tpl.attackClipName);
       if (clip) m.attackAction = m.mixer.clipAction(clip);
     }
-    if (!m.deathAction && monsterTemplate?.deathClipName) {
-      const clip = monsterTemplate.clips.find(c => c.name === monsterTemplate!.deathClipName);
+    if (!m.deathAction && tpl?.deathClipName) {
+      const clip = tpl.clips.find(c => c.name === tpl.deathClipName);
       if (clip) m.deathAction = m.mixer.clipAction(clip);
     }
 
@@ -766,50 +928,124 @@ function tickMonsters(dt: number): void {
     if (m.state === 'dying') {
       m.dyingTimer -= dt;
       if (m.dyingTimer <= 0) {
-        // Despawn after the death animation finishes.
-        scene.remove(m.group);
-        m.group.traverse(c => {
-          const mesh = c as THREE.Mesh;
-          if (mesh.isMesh && mesh.geometry) mesh.geometry.dispose();
-        });
-        monsters.splice(i, 1);
+        despawnMonster(m, i);
       }
       continue;
     }
 
     if (!m.alive) continue;
 
-    const toPlayer = player.position.clone().sub(m.position);
-    const dist = toPlayer.length();
+    if (m.kind === 'flier') tickFlier(m, dt);
+    else                    tickWalker(m, dt);
 
-    if (m.attackCooldown > 0) m.attackCooldown -= dt;
-
-    if (dist <= ATTACK_RANGE) {
-      setMonsterState(m, 'attacking');
-      if (m.attackCooldown <= 0) {
-        m.attackCooldown = ATTACK_INTERVAL;
-        flashDamage();
-      }
-    } else {
-      setMonsterState(m, 'walking');
-      const up = m.position.clone().normalize();
-      const tangent = toPlayer.clone().sub(up.clone().multiplyScalar(toPlayer.dot(up)));
-      if (tangent.lengthSq() > 1e-6) {
-        tangent.normalize();
-        m.position.addScaledVector(tangent, MONSTER_SPEED * dt);
-        const newUp = m.position.clone().normalize();
-        const r = getSurfaceRadius(newUp);
-        m.position.copy(newUp).multiplyScalar(r);
-      }
-    }
-
-    // Orient: stand up, face the player.
-    const stand = m.position.clone().normalize();
-    m.group.position.copy(m.position);
-    m.group.up.copy(stand);
-    const lookTarget = m.position.clone().add(toPlayer);
-    m.group.lookAt(lookTarget);
+    // HP bar position + redraw if changed
+    tickHpBar(m);
   }
+}
+
+function tickWalker(m: Monster, dt: number): void {
+  const toPlayer = player.position.clone().sub(m.position);
+  const dist = toPlayer.length();
+
+  if (m.attackCooldown > 0) m.attackCooldown -= dt;
+
+  if (dist <= ATTACK_RANGE) {
+    setMonsterState(m, 'attacking');
+    if (m.attackCooldown <= 0) {
+      m.attackCooldown = ATTACK_INTERVAL;
+      flashDamage();
+    }
+  } else {
+    setMonsterState(m, 'walking');
+    const up = m.position.clone().normalize();
+    const tangent = toPlayer.clone().sub(up.clone().multiplyScalar(toPlayer.dot(up)));
+    if (tangent.lengthSq() > 1e-6) {
+      tangent.normalize();
+      m.position.addScaledVector(tangent, MONSTER_SPEED * dt);
+      const newUp = m.position.clone().normalize();
+      const r = getSurfaceRadius(newUp);
+      m.position.copy(newUp).multiplyScalar(r);
+    }
+  }
+
+  // Orient: stand up, face the player.
+  const stand = m.position.clone().normalize();
+  m.group.position.copy(m.position);
+  m.group.up.copy(stand);
+  m.group.lookAt(m.position.clone().add(toPlayer));
+}
+
+function tickFlier(m: Monster, dt: number): void {
+  // Compute the local "up" at the flier's position and its altitude above
+  // the asteroid surface in that direction.
+  const up = m.position.clone().normalize();
+  const surfR = getSurfaceRadius(up);
+  const altitude = m.position.length() - surfR;
+
+  const toPlayer = player.position.clone().sub(m.position);
+  const dist = toPlayer.length();
+
+  // Move to maintain hover distance from player on the asteroid surface
+  // tangent plane.
+  const tangentToPlayer = toPlayer.clone().sub(up.clone().multiplyScalar(toPlayer.dot(up)));
+  const tangentDist = tangentToPlayer.length();
+  if (tangentDist > 1e-3) tangentToPlayer.divideScalar(tangentDist);
+
+  // horizontal: close to FLIER_HOVER_DIST
+  if (tangentDist > FLIER_HOVER_DIST + 1) {
+    m.position.addScaledVector(tangentToPlayer, FLIER_SPEED * dt);
+  } else if (tangentDist < FLIER_HOVER_DIST - 1) {
+    m.position.addScaledVector(tangentToPlayer, -FLIER_SPEED * dt * 0.5); // back off slower
+  }
+
+  // vertical: settle to FLIER_HOVER_ALT above the surface
+  const altErr = altitude - FLIER_HOVER_ALT;
+  if (Math.abs(altErr) > 0.3) {
+    m.position.addScaledVector(up, -Math.sign(altErr) * FLIER_SPEED * 0.6 * dt);
+  }
+
+  // gentle bob so it doesn't feel like a static prop
+  m.position.addScaledVector(up, Math.sin(performance.now() * 0.002 + m.fireCooldown) * 0.02);
+
+  // Fire plasma at the player periodically when in range
+  m.fireCooldown -= dt;
+  if (dist < FLIER_FIRE_RANGE && m.fireCooldown <= 0) {
+    fireProjectile(m.position.clone(), player.position.clone());
+    m.fireCooldown = FLIER_FIRE_INTERVAL;
+  }
+
+  // Orient (use the local surface normal as up, look at the player).
+  m.group.position.copy(m.position);
+  m.group.up.copy(up);
+  m.group.lookAt(player.position);
+}
+
+function despawnMonster(m: Monster, i?: number): void {
+  scene.remove(m.group);
+  scene.remove(m.hpBar);
+  m.hpBarTexture.dispose();
+  (m.hpBar.material as THREE.SpriteMaterial).dispose();
+  m.group.traverse(c => {
+    const mesh = c as THREE.Mesh;
+    if (mesh.isMesh && mesh.geometry) mesh.geometry.dispose();
+  });
+  const idx = i ?? monsters.indexOf(m);
+  if (idx >= 0) monsters.splice(idx, 1);
+}
+
+function tickHpBar(m: Monster): void {
+  const ratio = Math.max(0, m.hp / m.maxHp);
+  if (Math.abs(ratio - m.hpRatioDrawn) > 0.005) {
+    drawHpBar(m.hpBarCanvas, ratio);
+    m.hpBarTexture.needsUpdate = true;
+    m.hpRatioDrawn = ratio;
+  }
+  // position the bar above the creature
+  const up = m.position.clone().normalize();
+  const offset = m.kind === 'flier' ? 1.0 : 2.4;
+  m.hpBar.position.copy(m.position).addScaledVector(up, offset);
+  // hide once dead/dying
+  m.hpBar.visible = m.alive;
 }
 
 // --- weapon (FPS rig glb with arms + animations) --------------------------
@@ -968,30 +1204,43 @@ function attack(): void {
   while (node) {
     const m = monsters.find(x => x.group === node);
     if (m) {
-      killMonster(m, hit.point);
+      damageMonster(m, hit.point);
       return;
     }
     node = node.parent;
   }
 }
 
-function killMonster(m: Monster, hitPoint: THREE.Vector3): void {
+/**
+ * Bullet hit. Decrement HP; if it falls to zero, trigger death.
+ *  - Walkers prefer the death animation if available; else shatter.
+ *  - Fliers always shatter (per request — no death anim needed).
+ */
+function damageMonster(m: Monster, hitPoint: THREE.Vector3): void {
   if (!m.alive) return;
+  m.hp -= 1;
+  if (m.hp > 0) return; // still alive — HP bar will reflect new ratio next tick
+
   m.alive = false;
 
-  // Lazy-bind deathAction since template may not have been read for this monster yet.
-  if (!m.deathAction && monsterTemplate?.deathClipName) {
-    const clip = monsterTemplate.clips.find(c => c.name === monsterTemplate!.deathClipName);
+  if (m.kind === 'flier') {
+    shatterMonster(m, hitPoint);
+    return;
+  }
+
+  // Walker: try the death animation first, fall back to shatter.
+  const tpl = templateFor(m);
+  if (!m.deathAction && tpl?.deathClipName) {
+    const clip = tpl.clips.find(c => c.name === tpl.deathClipName);
     if (clip) m.deathAction = m.mixer.clipAction(clip);
   }
 
   if (m.deathAction) {
     setMonsterState(m, 'dying');
-    // Despawn one second after the animation ends, so the body lingers.
     const clipLen = m.deathAction.getClip().duration;
     m.dyingTimer = clipLen + 1.0;
+    m.hpBar.visible = false;
   } else {
-    // Fallback: shatter the monster into individual polygons, same effect as rocks.
     shatterMonster(m, hitPoint);
   }
 }
@@ -1028,10 +1277,8 @@ function shatterMonster(m: Monster, hitPoint: THREE.Vector3): void {
     }
   });
 
-  // Remove the monster immediately.
-  scene.remove(m.group);
-  const idx = monsters.indexOf(m);
-  if (idx >= 0) monsters.splice(idx, 1);
+  // Remove the monster (and its hp bar) immediately.
+  despawnMonster(m);
 
   // Emit fragments (subsampled).
   const step = Math.max(1, Math.ceil(tris.length / FRAG_MAX_PER_SHATTER));
@@ -1244,7 +1491,7 @@ async function renderCredits(): Promise<void> {
     const res = await fetch(`${MODEL_BASE}CREDITS.json`);
     if (!res.ok) return;
     const all: CreditsEntry[] = await res.json();
-    const used = all.filter(c => ['asteroid', 'rock', 'fps_rifle', 'monster'].includes(c.slug));
+    const used = all.filter(c => ['asteroid', 'rock', 'fps_rifle', 'monster', 'flier'].includes(c.slug));
     if (used.length === 0) return;
     const escapeHtml = (s: string) =>
       s.replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]!));
@@ -1267,7 +1514,9 @@ function animate(): void {
   try {
     const dt = Math.min(clock.getDelta(), 0.05);
     tickPlayer(dt);
+    tickMonsterSpawner(dt);
     tickMonsters(dt);
+    tickProjectiles(dt);
     updateWeapon(dt);
     updateFragments(dt);
     updateDamageFlash(dt);

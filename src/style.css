@@ -456,8 +456,7 @@ body {
 }
 
 .pile,
-.hand,
-.log {
+.hand {
   background: var(--bg-ui);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1009,10 +1008,58 @@ body {
   font-weight: 700;
 }
 
+.log-wrap {
+  position: relative;
+  background: var(--bg-ui);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0;
+}
+
+.log-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: #c8d9e8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.log-toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.log-toggle-chevron {
+  font-size: 12px;
+  transition: transform 120ms ease;
+}
+
+.log-wrap.collapsed .log-toggle {
+  border-bottom-color: transparent;
+}
+
+.log-wrap.collapsed .log-toggle-chevron {
+  transform: rotate(-90deg);
+}
+
+.log-wrap.collapsed .log {
+  display: none;
+}
+
 .log {
   min-height: 96px;
   max-height: 126px;
   overflow-y: auto;
+  padding: 8px 12px 10px;
 }
 
 .log-row {

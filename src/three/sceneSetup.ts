@@ -24,16 +24,31 @@ export function initThree(): void {
   boardEl.appendChild(renderer.domElement);
 
   controls = new OrbitControls(camera, renderer.domElement);
-  controls.enablePan = false;
+  controls.enablePan = true;
+  controls.screenSpacePanning = true;
+  controls.panSpeed = 1.0;
   controls.enableZoom = true;
   controls.zoomSpeed = 1.1;
   controls.minDistance = 16;
   controls.maxDistance = 120;
   controls.enableDamping = true;
   controls.target.set(0, 0, 0);
+  // LEFT is reserved for click-selection. While Shift is held we flip it to
+  // PAN so users can drag-pan without leaving the left button.
   controls.mouseButtons.LEFT = undefined as unknown as THREE.MOUSE;
   controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
-  controls.mouseButtons.MIDDLE = undefined as unknown as THREE.MOUSE;
+  controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Shift') controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift') controls.mouseButtons.LEFT = undefined as unknown as THREE.MOUSE;
+  });
+  // If the user releases Shift outside the window (focus loss), reset.
+  window.addEventListener('blur', () => {
+    controls.mouseButtons.LEFT = undefined as unknown as THREE.MOUSE;
+  });
 
   const ambient = new THREE.AmbientLight(0xffffff, 0.62);
   scene.add(ambient);

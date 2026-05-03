@@ -84,7 +84,8 @@ export function registerInputHandlerDeps(deps: InputHandlerDeps): void {
 // ---------------------------------------------------------------------------
 
 export function onPointerDown(event: PointerEvent): void {
-  if (event.button !== 0 || state.winner) {
+  // Left-click only, and not when Shift is held (Shift+drag pans the camera).
+  if (event.button !== 0 || event.shiftKey || state.winner) {
     return;
   }
 

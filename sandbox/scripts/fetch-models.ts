@@ -67,6 +67,9 @@ const QUERIES: Query[] = [
   // bone-resolution issues we hit with Polyart Zombies.
   { slug: 'monster',    query: 'terror engine medusa',      maxFaces: 25000, animated: true,
                         preferUid: 'ca8cb5485de84c4ea4642240ea8307fc' },
+  // DibArts "Wyvern" — winged flying creature, animated
+  { slug: 'flier',      query: 'wyvern animated',           maxFaces: 8000, animated: true,
+                        preferUid: 'b3b83f40265347dd90e4666c3e2a843c' },
 
   // (kept for potential future reuse, but the minimal scene only needs the three above)
   { slug: 'tree',     query: 'low poly tree',           maxFaces: 8000, excludeUids: EXCLUDE_TREE },
