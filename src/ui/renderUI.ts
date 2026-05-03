@@ -64,7 +64,6 @@ import {
   activateAssemblyLineDraw,
   activateAssemblyLineProduction,
   activateBuildingUpgrade,
-  confirmBuildingUpgradeStatusSelection,
 } from '../engine/buildings.ts';
 import type { BuildingType } from '../types';
 import { activateRepairTargeting } from '../engine/abilities.ts';
@@ -1188,7 +1187,11 @@ export function renderUI(): void {
         return;
       }
       if (state.mode === 'building_upgrade_status_pick') {
-        confirmBuildingUpgradeStatusSelection();
+        const buildingId = state.pendingUpgradeBuildingId;
+        const statusId = state.pendingUpgradeStatusId;
+        if (buildingId && statusId) {
+          dispatch({ type: 'CONFIRM_BUILDING_UPGRADE', buildingId, statusId });
+        }
       }
     });
   }

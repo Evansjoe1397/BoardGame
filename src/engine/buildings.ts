@@ -693,13 +693,8 @@ export function activateBuildingUpgrade(buildingId: string): void {
   renderUI();
 }
 
-export function confirmBuildingUpgradeStatusSelection(): void {
+export function executeConfirmBuildingUpgrade(buildingId: string, selectedStatusId: StatusId): void {
   const currentPlayer = getCurrentPlayer();
-  const buildingId = state.pendingUpgradeBuildingId;
-  const selectedStatusId = state.pendingUpgradeStatusId;
-  if (!buildingId || !selectedStatusId) {
-    return;
-  }
   const building = currentPlayer.buildings.find((candidate: Building) => candidate.id === buildingId);
   if (!building) {
     clearSelection();
@@ -747,6 +742,18 @@ export function confirmBuildingUpgradeStatusSelection(): void {
   state.pendingUpgradeStatusId = null;
   state.pendingUpgradeStatusOptions = [];
   renderUI();
+}
+
+/**
+ * Backwards-compat wrapper: reads pendingUpgradeBuildingId / pendingUpgradeStatusId
+ * out of state and calls the parameterised entry point. Used by code paths
+ * that haven't yet been migrated to dispatch a self-contained action.
+ */
+export function confirmBuildingUpgradeStatusSelection(): void {
+  const buildingId = state.pendingUpgradeBuildingId;
+  const selectedStatusId = state.pendingUpgradeStatusId;
+  if (!buildingId || !selectedStatusId) return;
+  executeConfirmBuildingUpgrade(buildingId, selectedStatusId);
 }
 
 // ---------------------------------------------------------------------------

@@ -55,6 +55,7 @@ import {
   executeConfirmBuildingPlacement,
   executePlayBuildCard,
   executeCancelBuildingPlacement,
+  executeConfirmBuildingUpgrade,
 } from '../engine/buildings.ts';
 import { CARD_LIBRARY } from '../data/cardLibrary.ts';
 import { setEnergy } from '../engine/playerResources.ts';
@@ -274,9 +275,13 @@ export function applyAction(action: Action): ReduceResult | ReduceError {
       return { ok: true, events: [] };
     }
 
+    case 'CONFIRM_BUILDING_UPGRADE': {
+      executeConfirmBuildingUpgrade(action.buildingId, action.statusId);
+      return { ok: true, events: [] };
+    }
+
     case 'ACTIVATE_BUILDING':
     case 'GEAR_STATION_OVERLOAD_TARGET':
-    case 'CONFIRM_BUILDING_UPGRADE':
     case 'FOUNDATION_TARGET':
     case 'FOUNDATION_CONFIRM':
       return {
