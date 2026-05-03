@@ -59,7 +59,8 @@ const QUERIES: Query[] = [
   { slug: 'asteroid',   query: 'asteroid with minerals',    maxFaces: 20000,
                         preferUid: '1cf93f26dbc34a08a31367ea8929117f' },
   { slug: 'rock',       query: 'low poly rock',             maxFaces: 5000 },
-  // user77 "AKM Assault" — animated FPS rig (rifle + first-person arms in one glb)
+  // user77 "AKM Assault Rifle - Animated" — full-size rifle FPS rig with arms, textured, CC-BY.
+  // Only one combined "Scene" clip (no separate reload), so reload is procedural.
   { slug: 'fps_rifle',  query: 'AKM Assault FPS animated',  maxFaces: 60000, animated: true,
                         preferUid: '6348dc53e3e249c6b297cb8f3f1e3e9b' },
   // Jazba "Terror Engine - Medusa" — single rigged enemy, 5 animations,

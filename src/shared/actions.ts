@@ -64,7 +64,7 @@ export type Action =
 
   // --- Buildings ---
   | { type: 'PLAY_BUILD_CARD'; buildingType: BuildingType; targetSquareKey: string }
-  | { type: 'CONFIRM_BUILDING_PLACEMENT'; statusId?: StatusId }
+  | { type: 'CONFIRM_BUILDING_PLACEMENT'; buildingType: BuildingType; squareKey: string; statusId: StatusId }
   | { type: 'CANCEL_BUILDING_PLACEMENT' }
   | {
       type: 'ACTIVATE_BUILDING';

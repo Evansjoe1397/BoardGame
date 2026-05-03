@@ -65,13 +65,8 @@ import {
   activateAssemblyLineProduction,
   activateBuildingUpgrade,
   confirmBuildingUpgradeStatusSelection,
-  confirmArmoryBuildPlacement,
-  confirmReplicatorBuildPlacement,
-  confirmWorkshopBuildPlacement,
-  confirmDatacenterBuildPlacement,
-  confirmGearStationBuildPlacement,
-  confirmAssemblyLineBuildPlacement,
 } from '../engine/buildings.ts';
+import type { BuildingType } from '../types';
 import { activateRepairTargeting } from '../engine/abilities.ts';
 import {
   getArtilleryAreaSquareKeys,
@@ -84,6 +79,28 @@ import { dispatch } from '../actionDispatcher.ts';
 
 export function getPlayerMaxEnergy(player: Player): number {
   return player?.maxEnergy ?? MAX_ENERGY;
+}
+
+/**
+ * Reads the active *_status_pick mode and pulls out the matching
+ * {buildingType, squareKey, statusId} so the confirm-button handler can
+ * dispatch a self-contained CONFIRM_BUILDING_PLACEMENT action.
+ *
+ * Returns null when state.mode is not a building status-pick (e.g. the
+ * upgrade flow, which stays a separate action).
+ */
+function readBuildingPlacementFromState(): { buildingType: BuildingType; squareKey: string; statusId: StatusId } | null {
+  const map: Array<{ mode: string; type: BuildingType; squareKey: string | null; statusId: StatusId | null }> = [
+    { mode: 'armory_status_pick', type: 'ARMORY', squareKey: state.pendingArmorySquareKey, statusId: state.pendingArmoryStatusId },
+    { mode: 'replicator_status_pick', type: 'REPLICATOR', squareKey: state.pendingReplicatorSquareKey, statusId: state.pendingReplicatorStatusId },
+    { mode: 'workshop_status_pick', type: 'WORKSHOP', squareKey: state.pendingWorkshopSquareKey, statusId: state.pendingWorkshopStatusId },
+    { mode: 'datacenter_status_pick', type: 'DATACENTER', squareKey: state.pendingDatacenterSquareKey, statusId: state.pendingDatacenterStatusId },
+    { mode: 'gear_station_status_pick', type: 'GEAR_STATION', squareKey: state.pendingGearStationSquareKey, statusId: state.pendingGearStationStatusId },
+    { mode: 'assembly_line_status_pick', type: 'ASSEMBLY_LINE', squareKey: state.pendingAssemblyLineSquareKey, statusId: state.pendingAssemblyLineStatusId },
+  ];
+  const match = map.find((m) => state.mode === m.mode);
+  if (!match || !match.squareKey || !match.statusId) return null;
+  return { buildingType: match.type, squareKey: match.squareKey, statusId: match.statusId };
 }
 
 export function refreshPlayerMaxEnergy(playerId: PlayerId, clampEnergy: boolean = true): number {
@@ -105,7 +122,6 @@ export function renderUI(): void {
   // by the events that actually change it (createBuilding,
   // confirmFoundationUse, destroyBase, startTurn). No mutating recompute here.
   const currentPlayer = getCurrentPlayer();
-  const opponentId = currentPlayer.id === 'A' ? 'B' : 'A';
   const playerA = state.players.A;
   const playerB = state.players.B;
   const aHp = state.players.A.baseHitPoints;
@@ -126,8 +142,8 @@ export function renderUI(): void {
   const youBadge = myPid !== null ? `<span class="you-badge ${myPid.toLowerCase()}">You: ${getPlayerName(myPid)} (${myPid})</span>` : '';
 
   turnStatusEl.innerHTML = `
-    <div class="status-main">${turnLabel} ${youBadge}</div>
-    <div class="base-hp-row">
+    <div class="status-row">
+      <div class="status-main">${turnLabel} ${youBadge}</div>
       <div class="base-hp a">
         <div class="base-hp-head">${getPlayerName('A')} <span>${aHp}</span></div>
         <div class="base-hp-track"><div class="base-hp-fill a" style="width: ${aPct}%"></div></div>
@@ -136,13 +152,10 @@ export function renderUI(): void {
         <div class="base-hp-head">${getPlayerName('B')} <span>${bHp}</span></div>
         <div class="base-hp-track"><div class="base-hp-fill b" style="width: ${bPct}%"></div></div>
       </div>
-    </div>
-    <div class="energy-panel">
-      <div class="energy-head">Energy <span>${currentPlayer.energy}/${currentPlayerMaxEnergy}</span></div>
-      <div class="energy-track"><div class="energy-fill" style="width: ${energyPct}%"></div></div>
-    </div>
-    <div class="status-help">
-      Left click: select card/unit/target. Right mouse hold: rotate camera.
+      <div class="energy-panel">
+        <div class="energy-head">Energy <span>${currentPlayer.energy}/${currentPlayerMaxEnergy}</span></div>
+        <div class="energy-track"><div class="energy-fill" style="width: ${energyPct}%"></div></div>
+      </div>
     </div>
   `;
 
@@ -166,9 +179,6 @@ export function renderUI(): void {
     selectedOwnedUnit && selectedOwnedUnit.unitTypeId === 'ARTILLERY_UNIT' ? selectedOwnedUnit : null;
   const selectedSpecialistUnit =
     selectedOwnedUnit && selectedOwnedUnit.unitTypeId === 'SPECIALIST_UNIT' ? selectedOwnedUnit : null;
-  const selectedUnitText = selectedUnit
-    ? `Selected Unit: ${selectedUnit.unitName} (${toSquareKey(selectedUnit.x, selectedUnit.z)}) HP ${selectedUnit.hitPoints}/${selectedUnit.maxHitPoints}`
-    : 'Selected Unit: none';
 
   const selectedMoveRange = selectedOwnedUnit ? getUnitCurrentMoveRange(selectedOwnedUnit) : 0;
   const selectedAttackRange = selectedOwnedUnit ? getUnitCurrentAttackRange(selectedOwnedUnit) : 0;
@@ -771,7 +781,6 @@ export function renderUI(): void {
         <div class="build-active">Active: ${activeBuildingsList || 'None'}</div>
       </div>
     </div>
-    <div class="selection-info">${selectedUnitText}</div>
   `;
 
   if (state.winner) {
@@ -831,8 +840,6 @@ export function renderUI(): void {
     handEl.innerHTML += `<div class="selection-info">Foundation: confirm the selected building destruction.</div>`;
   } else if (selectedOwnedUnit) {
     handEl.innerHTML += `<div class="selection-info">Move range: ${selectedMoveRange}, Attack range: ${selectedOwnedUnit.attackRange}</div>`;
-  } else {
-    handEl.innerHTML += `<div class="selection-info">Enemy Player: ${opponentId}</div>`;
   }
 
   pileAEl.innerHTML = `
@@ -1170,19 +1177,17 @@ export function renderUI(): void {
   const confirmBuildingStatusBtn = overlayEl.querySelector('#confirmBuildingStatusBtn');
   if (confirmBuildingStatusBtn) {
     confirmBuildingStatusBtn.addEventListener('click', () => {
-      if (state.mode === 'armory_status_pick') {
-        confirmArmoryBuildPlacement();
-      } else if (state.mode === 'replicator_status_pick') {
-        confirmReplicatorBuildPlacement();
-      } else if (state.mode === 'workshop_status_pick') {
-        confirmWorkshopBuildPlacement();
-      } else if (state.mode === 'datacenter_status_pick') {
-        confirmDatacenterBuildPlacement();
-      } else if (state.mode === 'gear_station_status_pick') {
-        confirmGearStationBuildPlacement();
-      } else if (state.mode === 'assembly_line_status_pick') {
-        confirmAssemblyLineBuildPlacement();
-      } else if (state.mode === 'building_upgrade_status_pick') {
+      const placement = readBuildingPlacementFromState();
+      if (placement) {
+        dispatch({
+          type: 'CONFIRM_BUILDING_PLACEMENT',
+          buildingType: placement.buildingType,
+          squareKey: placement.squareKey,
+          statusId: placement.statusId,
+        });
+        return;
+      }
+      if (state.mode === 'building_upgrade_status_pick') {
         confirmBuildingUpgradeStatusSelection();
       }
     });

@@ -51,6 +51,11 @@ import {
   getGaussLineSquareKeysFromTarget,
   getArtilleryAreaSquareKeys,
 } from '../engine/artillery.ts';
+import {
+  executeConfirmBuildingPlacement,
+  executePlayBuildCard,
+  executeCancelBuildingPlacement,
+} from '../engine/buildings.ts';
 import { CARD_LIBRARY } from '../data/cardLibrary.ts';
 import { setEnergy } from '../engine/playerResources.ts';
 import { getCardEnergyCost } from '../engine/cards.ts';
@@ -254,9 +259,21 @@ export function applyAction(action: Action): ReduceResult | ReduceError {
       return { ok: true, events: [] };
     }
 
-    case 'PLAY_BUILD_CARD':
-    case 'CONFIRM_BUILDING_PLACEMENT':
-    case 'CANCEL_BUILDING_PLACEMENT':
+    case 'PLAY_BUILD_CARD': {
+      executePlayBuildCard(action.buildingType, action.targetSquareKey);
+      return { ok: true, events: [] };
+    }
+
+    case 'CONFIRM_BUILDING_PLACEMENT': {
+      executeConfirmBuildingPlacement(action.buildingType, action.squareKey, action.statusId);
+      return { ok: true, events: [] };
+    }
+
+    case 'CANCEL_BUILDING_PLACEMENT': {
+      executeCancelBuildingPlacement();
+      return { ok: true, events: [] };
+    }
+
     case 'ACTIVATE_BUILDING':
     case 'GEAR_STATION_OVERLOAD_TARGET':
     case 'CONFIRM_BUILDING_UPGRADE':

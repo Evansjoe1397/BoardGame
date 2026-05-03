@@ -4,8 +4,6 @@ export let pileAEl: HTMLDivElement;
 export let pileBEl: HTMLDivElement;
 export let turnStatusEl: HTMLDivElement;
 export let logEl: HTMLDivElement;
-export let axisTopEl: HTMLDivElement;
-export let axisLeftEl: HTMLDivElement;
 export let endTurnBtn: HTMLButtonElement;
 export let droneStatsLeftEl: HTMLDivElement;
 export let droneStatsRightEl: HTMLDivElement;
@@ -26,8 +24,6 @@ export function initDomSetup(): void {
 
     <div class="board-wrap">
       <div id="board3d"></div>
-      <div class="axis axis-top" id="axisTop"></div>
-      <div class="axis axis-left" id="axisLeft"></div>
       <div class="process-echo-panel left" id="processEchoLeft">
         <div class="process-echo-title">Process Echo</div>
         <div class="process-echo-buttons">
@@ -72,8 +68,6 @@ export function initDomSetup(): void {
   pileBEl = document.getElementById('pileB') as HTMLDivElement;
   turnStatusEl = document.getElementById('turnStatus') as HTMLDivElement;
   logEl = document.getElementById('log') as HTMLDivElement;
-  axisTopEl = document.getElementById('axisTop') as HTMLDivElement;
-  axisLeftEl = document.getElementById('axisLeft') as HTMLDivElement;
   endTurnBtn = document.getElementById('endTurnBtn') as HTMLButtonElement;
   droneStatsLeftEl = document.getElementById('droneStatsLeft') as HTMLDivElement;
   droneStatsRightEl = document.getElementById('droneStatsRight') as HTMLDivElement;

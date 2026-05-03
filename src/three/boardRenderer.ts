@@ -4,7 +4,6 @@ import type { ExtendedUnitVisual } from './unitVisuals';
 import {
   BOARD_WIDTH,
   BOARD_LENGTH,
-  WIDTH_LABELS,
   TILE_SIZE,
   BASE_MAX_HIT_POINTS,
   SUPPLY_HARVEST_SQUARES,
@@ -43,7 +42,6 @@ import {
   getMoveRangeBorderLines,
   setMoveRangeBorderLines
 } from '../visualState.ts';
-import { axisTopEl, axisLeftEl } from '../ui/domSetup.ts';
 import {
   unitHasStatus,
   isUnitPlanted,
@@ -79,11 +77,6 @@ import {
   updateUnitFacing
 } from './unitDisplay.ts';
 import { resetWalkCycle } from './animation.ts';
-
-export function initAxisLabels(): void {
-  axisTopEl.innerHTML = WIDTH_LABELS.map((label) => `<span>${label}</span>`).join('');
-  axisLeftEl.innerHTML = Array.from({ length: BOARD_LENGTH }, (_, i) => `<span>${i + 1}</span>`).join('');
-}
 
 export function initBoard(): void {
   const squareGeometry = new THREE.BoxGeometry(TILE_SIZE * 0.95, 0.14, TILE_SIZE * 0.95);

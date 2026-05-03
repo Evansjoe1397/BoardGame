@@ -32,7 +32,7 @@ const PITCH_LIMIT = Math.PI / 2 - 0.05;
 const ROCK_COUNT = 50;
 const MONSTER_INITIAL = 6;
 const MONSTER_MAX_ALIVE = 50;
-const MONSTER_SPAWN_INTERVAL = 2.0;     // seconds between trickle spawns
+const MONSTER_SPAWN_INTERVAL = 6.0;     // seconds between trickle spawns
 const MONSTER_SPAWN_PLAYER_DOT = 0.6;   // reject spawn dirs within ~53° of player view (avoid pop-in)
 const MONSTER_SPEED = 2.2;       // m/s along the surface (walkers)
 const MONSTER_HEIGHT = 1.8;      // walker target height in metres after scaling
@@ -1068,12 +1068,22 @@ interface WeaponState {
   mixer: THREE.AnimationMixer | null;
   fireClip: THREE.AnimationClip | null;
   idleClip: THREE.AnimationClip | null;
+  reloadClip: THREE.AnimationClip | null;
+  fireAction: THREE.AnimationAction | null;
+  idleAction: THREE.AnimationAction | null;
+  reloadAction: THREE.AnimationAction | null;
   cooldown: number;
+  // Magazine + reload state
+  ammo: number;
+  reloading: boolean;
+  reloadTimer: number;     // remaining seconds of reload
 }
 
 let weapon: WeaponState | null = null;
 const FIRE_COOLDOWN = 0.10;
 const FIRE_RANGE = 200;
+const MAG_SIZE = 30;
+const RELOAD_TIME = 2.0;  // seconds to reload (clip duration overrides this when available)
 
 async function loadWeapon(): Promise<void> {
   let gltf;
@@ -1110,35 +1120,66 @@ async function loadWeapon(): Promise<void> {
   wrap.add(orient);
 
   wrap.scale.setScalar(scale);
-  // Default placement: a little right, a little down, in front of camera.
-  // FPS rigs are usually authored facing -Z already, so no rotation by default.
+  // AKM rig from user77 ships authored facing -Z, no rotation needed.
+  wrap.rotation.set(0, 0, 0);
   wrap.position.set(0.0, -0.15, -0.45);
-  // Camera-attached meshes are culled with their LOCAL bounding sphere against
-  // the world frustum, which can flicker when the bounds straddle the near
-  // plane during head-bob / movement. Force everything in this rig to skip the
-  // culling check so it renders every frame.
+  // Disable frustum culling on the camera-attached rig so the local bbox
+  // doesn't make it flicker out at the near plane during head-bob.
   wrap.traverse(c => { c.frustumCulled = false; });
   camera.add(wrap);
 
   // animations
   const clips = gltf.animations;
   const mixer = clips.length > 0 ? new THREE.AnimationMixer(inner) : null;
+
   let fireClip: THREE.AnimationClip | null = null;
   let idleClip: THREE.AnimationClip | null = null;
+  let reloadClip: THREE.AnimationClip | null = null;
   for (const clip of clips) {
     const n = clip.name.toLowerCase();
-    if (!fireClip && (n.includes('fire') || n.includes('shoot') || n.includes('attack'))) fireClip = clip;
-    if (!idleClip && (n.includes('idle') || n.includes('rest'))) idleClip = clip;
+    // Match shoot/fire but NOT "aim shoot" if a plain shoot exists; keep simple
+    if (!fireClip   && /\b(shoot|fire|attack)\b/.test(n) && !n.includes('aim')) fireClip = clip;
+    if (!idleClip   && /\b(idle|rest)\b/.test(n)) idleClip = clip;
+    // Plain "reload" preferred over "reload1"/"reload2"
+    if (n === 'reload' && !reloadClip) reloadClip = clip;
   }
-  if (mixer && idleClip) {
-    const a = mixer.clipAction(idleClip);
-    a.setLoop(THREE.LoopRepeat, Infinity);
-    a.play();
+  // fallback to any reload variant
+  if (!reloadClip) reloadClip = clips.find(c => /reload/i.test(c.name)) ?? null;
+  // fallback for fire if nothing matched
+  if (!fireClip) fireClip = clips.find(c => /shoot|fire/i.test(c.name)) ?? null;
+
+  let fireAction: THREE.AnimationAction | null = null;
+  let idleAction: THREE.AnimationAction | null = null;
+  let reloadAction: THREE.AnimationAction | null = null;
+  if (mixer) {
+    if (idleClip) {
+      idleAction = mixer.clipAction(idleClip);
+      idleAction.setLoop(THREE.LoopRepeat, Infinity);
+      idleAction.play();
+    }
+    if (fireClip) {
+      fireAction = mixer.clipAction(fireClip);
+      fireAction.setLoop(THREE.LoopOnce, 1);
+      fireAction.clampWhenFinished = false;
+    }
+    if (reloadClip) {
+      reloadAction = mixer.clipAction(reloadClip);
+      reloadAction.setLoop(THREE.LoopOnce, 1);
+      reloadAction.clampWhenFinished = false;
+    }
   }
 
-  console.log(`[weapon] loaded: bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)}, scale=${scale.toFixed(3)}, clips=[${clips.map(c => c.name).join(', ')}], fire="${fireClip?.name}", idle="${idleClip?.name}"`);
+  console.log(`[weapon] loaded: bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)}, scale=${scale.toFixed(3)}, clips=[${clips.map(c => c.name).join(', ')}], fire="${fireClip?.name}", idle="${idleClip?.name}", reload="${reloadClip?.name}"`);
 
-  weapon = { group: wrap, mixer, fireClip, idleClip, cooldown: 0 };
+  weapon = {
+    group: wrap, mixer,
+    fireClip, idleClip, reloadClip,
+    fireAction, idleAction, reloadAction,
+    cooldown: 0,
+    ammo: MAG_SIZE,
+    reloading: false,
+    reloadTimer: 0,
+  };
 }
 
 // muzzle flash (spawned manually since clip-driven flashes vary by rig)
@@ -1167,13 +1208,62 @@ camera.add(flashSprite);
 
 let flashTime = 0;
 
+// --- ammo HUD + reload ----------------------------------------------------
+
+const ammoHudEl = document.createElement('div');
+ammoHudEl.style.position = 'fixed';
+ammoHudEl.style.right = '14px';
+ammoHudEl.style.bottom = '14px';
+ammoHudEl.style.font = '600 22px/1 ui-monospace, monospace';
+ammoHudEl.style.color = '#cfd8e3';
+ammoHudEl.style.background = 'rgba(0,0,0,0.45)';
+ammoHudEl.style.padding = '8px 14px';
+ammoHudEl.style.borderRadius = '6px';
+ammoHudEl.style.pointerEvents = 'none';
+ammoHudEl.style.minWidth = '70px';
+ammoHudEl.style.textAlign = 'right';
+ammoHudEl.textContent = `${MAG_SIZE} / ${MAG_SIZE}`;
+document.body.appendChild(ammoHudEl);
+
+function updateAmmoHud(): void {
+  if (!weapon) return;
+  if (weapon.reloading) {
+    ammoHudEl.textContent = 'RELOADING...';
+    ammoHudEl.style.color = '#ffa030';
+  } else {
+    ammoHudEl.textContent = `${weapon.ammo} / ${MAG_SIZE}`;
+    ammoHudEl.style.color = weapon.ammo <= 5 ? '#dd2222' : '#cfd8e3';
+  }
+}
+
+function startReload(): void {
+  if (!weapon || weapon.reloading || weapon.ammo === MAG_SIZE) return;
+  weapon.reloading = true;
+  if (weapon.reloadAction && weapon.reloadClip) {
+    weapon.reloadAction.reset().play();
+    weapon.reloadTimer = weapon.reloadClip.duration;
+  } else {
+    weapon.reloadTimer = RELOAD_TIME;
+  }
+  updateAmmoHud();
+}
+
 // --- attack ---------------------------------------------------------------
 
 const raycaster = new THREE.Raycaster();
 
 function attack(): void {
   if (!weapon || weapon.cooldown > 0) return;
+  // Out-of-ammo or actively reloading → block fire and trigger reload if we
+  // haven't already.
+  if (weapon.reloading) return;
+  if (weapon.ammo <= 0) {
+    startReload();
+    return;
+  }
   weapon.cooldown = FIRE_COOLDOWN;
+  weapon.ammo -= 1;
+  updateAmmoHud();
 
   // muzzle flash
   flashSprite.visible = true;
@@ -1182,12 +1272,13 @@ function attack(): void {
   flashSprite.material.rotation = Math.random() * Math.PI;
 
   // fire animation
-  if (weapon.mixer && weapon.fireClip) {
-    const a = weapon.mixer.clipAction(weapon.fireClip);
-    a.setLoop(THREE.LoopOnce, 1);
-    a.clampWhenFinished = false;
-    a.reset().play();
+  if (weapon.fireAction) {
+    weapon.fireAction.reset().play();
   }
+
+  // Auto-reload once the magazine empties — feels nicer than forcing the
+  // player to dry-click before pressing R.
+  if (weapon.ammo === 0) startReload();
 
   // raycast against rocks AND monsters; pick the closer hit.
   const origin = new THREE.Vector3();
@@ -1362,7 +1453,10 @@ const player: Player = {
 };
 
 const keys = new Set<string>();
-window.addEventListener('keydown', (e) => keys.add(e.code));
+window.addEventListener('keydown', (e) => {
+  keys.add(e.code);
+  if (e.code === 'KeyR') startReload();
+});
 window.addEventListener('keyup',   (e) => keys.delete(e.code));
 
 let firing = false;
@@ -1491,7 +1585,18 @@ function tickPlayer(dt: number): void {
 function updateWeapon(dt: number): void {
   if (!weapon) return;
   if (weapon.cooldown > 0) weapon.cooldown = Math.max(0, weapon.cooldown - dt);
-  if (firing && weapon.cooldown <= 0) attack();
+
+  if (weapon.reloading) {
+    weapon.reloadTimer -= dt;
+    if (weapon.reloadTimer <= 0) {
+      weapon.reloading = false;
+      weapon.ammo = MAG_SIZE;
+      updateAmmoHud();
+    }
+  }
+
+  // hold-to-fire (auto)
+  if (firing && weapon.cooldown <= 0 && !weapon.reloading) attack();
   if (weapon.mixer) weapon.mixer.update(dt);
 }
 

@@ -3,7 +3,7 @@ import './style.css';
 // --- Bridge: wire render callbacks before anything else ---
 import { registerRenderUI, registerSyncBoardVisualState } from './bridge.ts';
 import { renderUI, getPlayerMaxEnergy, refreshPlayerMaxEnergy } from './ui/renderUI.ts';
-import { syncBoardVisualState, initBoard, initAxisLabels } from './three/boardRenderer.ts';
+import { syncBoardVisualState, initBoard } from './three/boardRenderer.ts';
 import { setEventSink, emit } from './shared/events.ts';
 import { applyEvents } from './eventApplier/index.ts';
 
@@ -127,7 +127,6 @@ function replaceLocalStateFrom(snapshot: GameState): void {
 
 // --- Init & start ---
 async function init() {
-  initAxisLabels();
   initThree();
 
   // Preload .glb models (missing files are silently skipped → procedural fallback)

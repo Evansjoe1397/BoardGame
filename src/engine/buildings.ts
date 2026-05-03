@@ -1041,6 +1041,127 @@ export function confirmAssemblyLineBuildPlacement(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Unified placement: handles all six status-pick buildings (Armory,
+// Replicator, Workshop, Datacenter, Gear Station, Assembly Line). The
+// per-building confirmXBuildPlacement functions remain for now as thin
+// wrappers but the reducer routes through this single entry point.
+// ---------------------------------------------------------------------------
+
+const BUILD_CARD_BY_TYPE: Record<string, { id: BuildingType; supplyCost: number; buildingType: BuildingType } | undefined> = {
+  ARMORY: BUILD_CARD_LIBRARY.ARMORY,
+  REPLICATOR: BUILD_CARD_LIBRARY.REPLICATOR,
+  WORKSHOP: BUILD_CARD_LIBRARY.WORKSHOP,
+  DATACENTER: BUILD_CARD_LIBRARY.DATACENTER,
+  GEAR_STATION: BUILD_CARD_LIBRARY.GEAR_STATION,
+  ASSEMBLY_LINE: BUILD_CARD_LIBRARY.ASSEMBLY_LINE,
+  FOUNDATION: BUILD_CARD_LIBRARY.FOUNDATION,
+};
+
+function clearAllPendingBuildState(): void {
+  state.mode = 'idle';
+  state.placingBuildingType = null;
+  state.pendingArmorySquareKey = null;
+  state.pendingArmoryStatusId = null;
+  state.pendingArmoryDraftStatusIds = [];
+  state.pendingReplicatorSquareKey = null;
+  state.pendingReplicatorStatusId = null;
+  state.pendingWorkshopSquareKey = null;
+  state.pendingWorkshopStatusId = null;
+  state.pendingDatacenterSquareKey = null;
+  state.pendingDatacenterStatusId = null;
+  state.pendingGearStationSquareKey = null;
+  state.pendingGearStationStatusId = null;
+  state.pendingAssemblyLineSquareKey = null;
+  state.pendingAssemblyLineStatusId = null;
+}
+
+export function executeConfirmBuildingPlacement(
+  buildingType: BuildingType,
+  squareKey: string,
+  statusId: StatusId,
+): void {
+  const card = BUILD_CARD_BY_TYPE[buildingType];
+  if (!card) {
+    addLog(`Unknown building type: ${buildingType}.`);
+    return;
+  }
+  if (!DRONE_STATUS_LIBRARY[statusId]) {
+    addLog('Select a Drone Status before confirming the build.');
+    return;
+  }
+
+  const currentPlayer = getCurrentPlayer();
+  if (currentPlayer.supply < card.supplyCost) {
+    addLog('Not enough Supply to build this structure.');
+    clearSelection();
+    renderUI();
+    return;
+  }
+  if (!isPlayerBaseSquare(currentPlayer.id, squareKey)) {
+    addLog('Building can only be placed on your base squares.');
+    clearSelection();
+    renderUI();
+    return;
+  }
+  const square = fromSquareKey(squareKey);
+  if (getUnitAt(square.x, square.z) || getBuildingAtSquare(currentPlayer.id, squareKey)) {
+    addLog('Selected base square is no longer available.');
+    clearSelection();
+    renderUI();
+    return;
+  }
+
+  setSupply(currentPlayer, currentPlayer.supply - card.supplyCost);
+  const building = createBuilding(currentPlayer.id, card.buildingType, squareKey, {
+    assignedStatusId: statusId,
+  });
+  currentPlayer.buildingsPlayedThisTurn += 1;
+  clearAllPendingBuildState();
+  addLog(`Player ${currentPlayer.id} built ${getBuildingDisplayName(building)} on ${squareKey}.`);
+  syncBoardVisualState();
+  renderUI();
+}
+
+// Direct-place (no status pick) — currently only Foundation, but parametrised
+// in case more zero-status buildings appear.
+export function executePlayBuildCard(buildingType: BuildingType, targetSquareKey: string): void {
+  const card = BUILD_CARD_BY_TYPE[buildingType];
+  if (!card) {
+    addLog(`Unknown building type: ${buildingType}.`);
+    return;
+  }
+  const currentPlayer = getCurrentPlayer();
+  if (currentPlayer.supply < card.supplyCost) {
+    addLog('Not enough Supply to build this structure.');
+    return;
+  }
+  if (!isPlayerBaseSquare(currentPlayer.id, targetSquareKey)) {
+    addLog('Building can only be placed on your base squares.');
+    return;
+  }
+  const square = fromSquareKey(targetSquareKey);
+  if (getUnitAt(square.x, square.z) || getBuildingAtSquare(currentPlayer.id, targetSquareKey)) {
+    addLog('Selected base square is no longer available.');
+    return;
+  }
+
+  setSupply(currentPlayer, currentPlayer.supply - card.supplyCost);
+  const building = createBuilding(currentPlayer.id, card.buildingType, targetSquareKey);
+  currentPlayer.buildingsPlayedThisTurn += 1;
+  state.mode = 'idle';
+  state.placingBuildingType = null;
+  addLog(`Player ${currentPlayer.id} built ${getBuildingDisplayName(building)} on ${targetSquareKey}.`);
+  syncBoardVisualState();
+  renderUI();
+}
+
+export function executeCancelBuildingPlacement(): void {
+  clearAllPendingBuildState();
+  syncBoardVisualState();
+  renderUI();
+}
+
+// ---------------------------------------------------------------------------
 // Overload target handler
 // ---------------------------------------------------------------------------
 

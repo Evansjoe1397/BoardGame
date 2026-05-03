@@ -15,7 +15,7 @@ import {
   canPlayerDirectlyTargetUnit
 } from '../utils.ts';
 import { BASE_ARTILLERY_FRONT_SQUARES } from '../constants.ts';
-import type { Building, Player, PlayerId } from '../types';
+import type { PlayerId } from '../types';
 
 interface HitUserData {
   type: string;
@@ -54,10 +54,6 @@ import {
   applyShieldingEffectToUnit,
 } from '../engine/abilities.ts';
 import {
-  createBuilding,
-  getBuildingDisplayName
-} from '../engine/buildings.ts';
-import {
   getUnitHeadWorldPosition,
   playExplosionAt,
   playSystemShockImpact,
@@ -71,15 +67,11 @@ import {
 // These are set via registerInputTargetingDeps() called from main.js during init.
 // ---------------------------------------------------------------------------
 
-interface InputTargetingDeps {
-  getPlayerMaxEnergy?: (player: Player) => number;
-}
-
-let getPlayerMaxEnergy: (player: Player) => number = () => 30;
-
-export function registerInputTargetingDeps(deps: InputTargetingDeps): void {
-  if (deps.getPlayerMaxEnergy) getPlayerMaxEnergy = deps.getPlayerMaxEnergy;
-}
+// No late-bound deps remain — kept as a placeholder so main.ts can still
+// call registerInputTargetingDeps without breaking import sites.
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface InputTargetingDeps {}
+export function registerInputTargetingDeps(_deps: InputTargetingDeps): void {}
 
 // ---------------------------------------------------------------------------
 // Repair Target Click
@@ -779,15 +771,9 @@ export function handleBuildingPlacementClick(hit: HitObject): void {
     }
   }
 
-  currentPlayer.supply -= buildingCard.supplyCost;
-  const building = createBuilding(currentPlayer.id, buildingCard.buildingType, squareKey) as unknown as Building;
-  if (building.type === 'DATACENTER') {
-    logHint(`Datacenter built: Player ${currentPlayer.id} max Energy increased by 5 (now ${getPlayerMaxEnergy(currentPlayer)}).`);
-  }
-  currentPlayer.buildingsPlayedThisTurn += 1;
-  state.mode = 'idle';
-  state.placingBuildingType = null;
-  logHint(`Player ${currentPlayer.id} built ${getBuildingDisplayName(building)} on ${squareKey}.`);
-  syncBoardVisualState();
-  renderUI();
+  dispatch({
+    type: 'PLAY_BUILD_CARD',
+    buildingType: buildingCard.buildingType,
+    targetSquareKey: squareKey,
+  });
 }
