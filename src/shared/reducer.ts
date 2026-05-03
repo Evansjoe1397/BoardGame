@@ -17,9 +17,20 @@
 
 import type { Action } from './actions.ts';
 import type { GameEvent } from './events.ts';
+import { state } from '../state.ts';
+import { fromSquareKey } from '../utils.ts';
 
-// Engine entry points that ARE wired today
+// Engine entry points
 import { endTurn as engineEndTurn } from '../engine/turnManager.ts';
+import {
+  applyUnitAttack,
+  applyBaseAttack,
+  summonUnit,
+  executeUnitMove,
+} from '../engine/combat.ts';
+import { CARD_LIBRARY } from '../data/cardLibrary.ts';
+import { setEnergy } from '../engine/playerResources.ts';
+import { getCardEnergyCost } from '../engine/cards.ts';
 
 export interface ReduceResult {
   ok: true;
@@ -56,10 +67,50 @@ export function applyAction(action: Action): ReduceResult | ReduceError {
     // incrementally (Stage A.9+, Stage C). Until then they call the engine
     // directly, which still emits events the same way.
     // ---------------------------------------------------------------------
-    case 'MOVE_UNIT':
-    case 'ATTACK_UNIT':
-    case 'ATTACK_BASE':
-    case 'PLAY_UNIT_CARD':
+    case 'MOVE_UNIT': {
+      const unit = state.units.find((u) => u.id === action.unitId);
+      if (!unit) return { ok: false, error: 'unit_not_found', events: [] };
+      const target = fromSquareKey(action.targetSquareKey);
+      executeUnitMove(unit, target.x, target.z);
+      return { ok: true, events: [] };
+    }
+
+    case 'ATTACK_UNIT': {
+      const attacker = state.units.find((u) => u.id === action.attackerId);
+      const target = state.units.find((u) => u.id === action.targetUnitId);
+      if (!attacker || !target) return { ok: false, error: 'unit_not_found', events: [] };
+      applyUnitAttack(attacker, target);
+      return { ok: true, events: [] };
+    }
+
+    case 'ATTACK_BASE': {
+      const attacker = state.units.find((u) => u.id === action.attackerId);
+      if (!attacker) return { ok: false, error: 'unit_not_found', events: [] };
+      applyBaseAttack(attacker, action.baseOwner, action.targetSquareKey);
+      return { ok: true, events: [] };
+    }
+
+    case 'PLAY_UNIT_CARD': {
+      const player = state.players[state.currentPlayerId];
+      const card = player.hand[action.handIndex];
+      if (!card) return { ok: false, error: 'card_not_in_hand', events: [] };
+      const template = CARD_LIBRARY[card.cardId] as { energyCost: number; summonUnitId?: string };
+      if (!template?.summonUnitId) {
+        return { ok: false, error: 'not_a_unit_card', events: [] };
+      }
+      const cost = getCardEnergyCost(card);
+      setEnergy(player, player.energy - cost);
+      player.hand.splice(action.handIndex, 1);
+      player.discard.push(card);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      summonUnit(player.id, action.targetSquareKey, template.summonUnitId as any, {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(card.adjacencyBonuses ? (card.adjacencyBonuses as any) : {}),
+        grantedStatusIds: card.grantedStatusIds ?? [],
+      });
+      return { ok: true, events: [] };
+    }
+
     case 'PLAY_SYSTEM_SHOCK':
     case 'PLAY_SHIELDING':
     case 'PLAY_SHIMMERING_CLOAK':

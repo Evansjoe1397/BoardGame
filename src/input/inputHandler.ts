@@ -31,7 +31,7 @@ interface HitUserData {
 
 type HitObject = THREE.Object3D & { userData: HitUserData };
 
-import { applyUnitAttack, applyBaseAttack, summonUnit, executeUnitMove } from '../engine/combat.ts';
+import { applyUnitAttack } from '../engine/combat.ts';
 import {
   getUnitCurrentMoveRange,
   getUnitCurrentAttackRange,
@@ -374,13 +374,11 @@ export function handleCardTargetClick(hit: HitObject): void {
     return;
   }
 
-  currentPlayer.energy -= cardEnergyCost;
-  currentPlayer.hand.splice(state.selectedCardHandIndex, 1);
-  currentPlayer.discard.push(selectedCard);
-
-  summonUnit(currentPlayer.id, targetSquare, cardTemplate.summonUnitId!, {
-    ...(selectedCard.adjacencyBonuses ?? {}),
-    grantedStatusIds: selectedCard.grantedStatusIds ?? []
+  // Energy spend, hand mutation, and summon all live in the reducer.
+  dispatch({
+    type: 'PLAY_UNIT_CARD',
+    handIndex: state.selectedCardHandIndex,
+    targetSquareKey: targetSquare,
   });
   clearSelection();
   renderUI();
@@ -454,7 +452,11 @@ export function handleUnitClick(unitId: string): void {
     return;
   }
 
-  applyUnitAttack(selectedUnit, clickedUnit);
+  dispatch({
+    type: 'ATTACK_UNIT',
+    attackerId: selectedUnit.id,
+    targetUnitId: clickedUnit.id,
+  });
   if (selectedUnit.unitTypeId === 'TANK_DRONE_UNIT' && unitHasStatus(selectedUnit, DRONE_STATUS_LIBRARY.FACE_EATER.id)) {
     selectedUnit.tankFaceEaterAttackCooldown = 3;
   }
@@ -521,7 +523,12 @@ export function handleBaseClick(baseOwner: string, squareKey: string): void {
     return;
   }
 
-  applyBaseAttack(selectedUnit, baseOwner as PlayerId, squareKey);
+  dispatch({
+    type: 'ATTACK_BASE',
+    attackerId: selectedUnit.id,
+    baseOwner: baseOwner as PlayerId,
+    targetSquareKey: squareKey,
+  });
   if (selectedUnit.unitTypeId === 'TANK_DRONE_UNIT' && unitHasStatus(selectedUnit, DRONE_STATUS_LIBRARY.FACE_EATER.id)) {
     selectedUnit.tankFaceEaterAttackCooldown = 3;
   }
@@ -608,9 +615,7 @@ export function handleSquareClick(squareKey: string): void {
     return;
   }
 
-  // Game-state mutation lives in the engine; input handler only validates
-  // and dispatches the move.
-  executeUnitMove(selectedUnit, target.x, target.z);
+  dispatch({ type: 'MOVE_UNIT', unitId: selectedUnit.id, targetSquareKey: squareKey });
 
   const tangoReactorAtDestination = getTangoReactorForPosition(selectedUnit, target.x, target.z);
   if (tangoReactorAtDestination) {
