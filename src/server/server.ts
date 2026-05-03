@@ -233,17 +233,18 @@ const server = Bun.serve<WsData, never>({
       }
     },
 
-    close(ws) {
+    close(ws, code, reason) {
       const { pid, roomId } = ws.data;
+      const tag = `code=${code} reason=${JSON.stringify(reason ?? '')}`;
       if (pid && roomId) {
         const player = roomManager.markDisconnected(roomId, pid);
         if (player) {
           const room = roomManager.get(roomId);
           if (room) room.broadcast({ type: 'player_disconnected', pid });
-          console.log(`[room ${roomId}] ${player.nickname} disconnected (grace period)`);
+          console.log(`[room ${roomId}] ${player.nickname} disconnected (grace period) ${tag}`);
         }
       } else {
-        console.log('[ws] connection closed (no room)');
+        console.log(`[ws] connection closed (no room) ${tag}`);
       }
     },
 

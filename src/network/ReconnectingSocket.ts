@@ -131,7 +131,10 @@ export class ReconnectingSocket {
       this.emit('message', parsed);
     });
 
-    ws.addEventListener('close', () => {
+    ws.addEventListener('close', (event) => {
+      console.warn(
+        `[net] ws closed code=${event.code} reason=${JSON.stringify(event.reason)} clean=${event.wasClean}`,
+      );
       this.stopHeartbeat();
       this.ws = null;
       this.emit('disconnected', undefined);
@@ -139,7 +142,8 @@ export class ReconnectingSocket {
       this.scheduleReconnect();
     });
 
-    ws.addEventListener('error', () => {
+    ws.addEventListener('error', (event) => {
+      console.warn('[net] ws error', event);
       // 'close' fires after 'error', so we don't schedule reconnect here.
     });
   }

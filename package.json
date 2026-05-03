@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "server": "bun --hot run src/server/server.ts",
+    "server": "bun run src/server/server.ts",
     "server:smoketest": "bun run src/server/smoketest.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
