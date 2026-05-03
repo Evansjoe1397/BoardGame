@@ -1,40 +1,18 @@
 import './style.css';
 
-// --- Bridge: wire render callbacks before anything else ---
-import { registerRenderUI, registerSyncBoardVisualState } from './bridge.ts';
 import { renderUI, getPlayerMaxEnergy, refreshPlayerMaxEnergy } from './ui/renderUI.ts';
 import { syncBoardVisualState, initBoard } from './three/boardRenderer.ts';
 import { setEventSink, emit } from './shared/events.ts';
 import { applyEvents } from './eventApplier/index.ts';
 
-// Pure engine emits typed events; client applies them to DOM/Three.js.
-// In multiplayer we also push the resulting state to the server after every
-// drained event batch — that's the "trust-the-actor" relay covering input
-// handlers that haven't been migrated through the action+reducer protocol.
+// Pure engine emits typed events; the client applier turns them into DOM /
+// Three.js side-effects. The server runs the same engine code with no DOM
+// and broadcasts the events; when they arrive here, the same applier draws
+// them. No "trust the actor" state push anymore — the server is the only
+// authority and the dispatch+reducer pipeline is the only mutation path.
 setEventSink((events) => {
   applyEvents(events);
-  // Push to the server only when something MEANINGFUL happened. A batch
-  // containing only BOARD_SYNC / UI_REFRESH is a pure re-render trigger
-  // (e.g. line ~1681 of renderUI runs syncBoardVisualState at the end of
-  // every render), not a state mutation — pushing those would cause an
-  // infinite ping-pong because every state_snapshot the client receives
-  // also calls renderUI, which emits BOARD_SYNC, which would push back.
-  const meaningful = events.some((e) => e.type !== 'BOARD_SYNC' && e.type !== 'UI_REFRESH');
-  if (!meaningful) return;
-  if (net.getIdentity() !== null && net.isConnected()) {
-    const raw = getActiveContext().state;
-    const snapshot = JSON.parse(JSON.stringify(raw));
-    console.log('[push]', {
-      events: events.map((e) => e.type),
-      current: snapshot.currentPlayerId,
-      units: snapshot.units?.map((u: { id: string; x: number; z: number }) => `${u.id}@${u.x},${u.z}`),
-    });
-    net.pushState(snapshot, events);
-  }
 });
-
-registerRenderUI(renderUI);
-registerSyncBoardVisualState(syncBoardVisualState);
 
 // --- DOM setup ---
 import { initDomSetup, boardEl, endTurnBtn } from './ui/domSetup.ts';
@@ -60,7 +38,7 @@ import { registerInputTargetingDeps } from './input/inputTargeting.ts';
 import { removeUnitShield, applyShieldToUnit, consumeSystemShockFollowUp } from './engine/unitStats.ts';
 import { addShimmeringCloak } from './engine/unitStats.ts';
 import { getUnitWorldPosition } from './three/effects.ts';
-import { drawCards, startGame, applyProcessEchoPlayResult } from './engine/turnManager.ts';
+import { drawCards, applyProcessEchoPlayResult } from './engine/turnManager.ts';
 import { dispatch } from './actionDispatcher.ts';
 
 // Engine effect callbacks are wired to event emission (no direct Three.js
@@ -110,15 +88,11 @@ import { onPointerDown, onPointerMove, onKeyDown, onKeyUp } from './input/inputH
 
 // --- Multiplayer (network + lobby) ---
 import * as net from './network/index.ts';
-import { initLobby, setOfflineStartHandler } from './ui/lobby.ts';
-import { state as gameState, getActiveContext } from './state.ts';
+import { initLobby } from './ui/lobby.ts';
+import { getActiveContext } from './state.ts';
 import type { GameState } from './types';
 
 function replaceLocalStateFrom(snapshot: GameState): void {
-  console.log('[snapshot received]', {
-    current: snapshot.currentPlayerId,
-    units: snapshot.units?.map((u) => `${u.id}@${u.x},${u.z}`),
-  });
   const ctx = getActiveContext();
   ctx.state = snapshot;
   renderUI();
@@ -153,12 +127,8 @@ async function init() {
   // otherwise the lobby overlay handles create/join.
   net.start();
 
-  // The "Play offline" button on the home screen runs the game locally.
-  setOfflineStartHandler(() => startGame());
-
   // Lobby overlay reads the URL and decides whether to show home / join /
-  // waiting. It hides itself once the first state_snapshot arrives, or
-  // when the user picks "Play offline".
+  // waiting. It hides itself once the first state_snapshot arrives.
   initLobby();
 }
 

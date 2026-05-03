@@ -138,10 +138,6 @@ function renderHome(): string {
     <div class="lobby-row">
       <button id="lobbyJoin" type="button">Join</button>
     </div>
-    <div class="lobby-divider">or</div>
-    <div class="lobby-row">
-      <button id="lobbyOffline" type="button" class="lobby-secondary">Play offline (hot-seat)</button>
-    </div>
   `;
 }
 
@@ -211,18 +207,6 @@ function wireHandlers(): void {
     saveNickname(name);
     net.joinRoom(pendingRoomId, name);
   });
-
-  overlayEl.querySelector<HTMLButtonElement>('#lobbyOffline')?.addEventListener('click', () => {
-    // Single-player hot-seat: hide the lobby and start the game locally.
-    mode = 'hidden';
-    render();
-    if (offlineStartHandler) offlineStartHandler();
-  });
-}
-
-let offlineStartHandler: (() => void) | null = null;
-export function setOfflineStartHandler(fn: () => void): void {
-  offlineStartHandler = fn;
 }
 
 function escapeHtml(s: string): string {

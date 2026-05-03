@@ -177,25 +177,6 @@ const server = Bun.serve<WsData, never>({
           return;
         }
 
-        case 'state_push': {
-          const { pid, roomId } = ws.data;
-          if (!pid || !roomId) return;
-          const room = roomManager.get(roomId);
-          if (!room) return;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const incoming = msg.state as any;
-          console.log(`[room ${roomId}] state_push from ${pid}: A.energy=${incoming.players?.A?.energy} B.energy=${incoming.players?.B?.energy} current=${incoming.currentPlayerId} events=${msg.events.length}`);
-          for (const key of Object.keys(room.context.state)) {
-            delete (room.context.state as unknown as Record<string, unknown>)[key];
-          }
-          Object.assign(room.context.state as object, incoming);
-          if (msg.events.length > 0) {
-            room.broadcastExcept(pid, { type: 'events', events: msg.events });
-          }
-          room.broadcastExcept(pid, { type: 'state_snapshot', state: room.context.state });
-          return;
-        }
-
         case 'action': {
           const { pid, roomId } = ws.data;
           if (!pid || !roomId) {

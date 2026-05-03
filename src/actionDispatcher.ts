@@ -1,52 +1,30 @@
 /**
  * Client action dispatcher.
  *
- * Single-player flow:
- *   input handler → dispatch(action) → applyAction(action) → events emitted
- *   → microtask drains buffer → eventApplier runs side-effects (DOM, Three.js)
- *
- * Future multiplayer flow (Stage C):
+ * Multiplayer-only flow:
  *   input handler → dispatch(action) → network.send({ action })
- *   → server validates + applies → broadcasts events → eventApplier runs them
+ *   → server validates + applies the reducer → broadcasts events + state snapshot
+ *   → client eventApplier runs side-effects (DOM, Three.js)
  *
- * This module hides whether dispatch is local-synchronous or remote-async
- * from the input layer.
+ * The local reducer is no longer reachable from this entry point — every
+ * action goes through the server. If the socket isn't connected the dispatch
+ * is dropped (logged in console). Reconnect logic is owned by the network
+ * module; nothing on the action path retries.
  */
 
 import type { Action } from './shared/actions.ts';
-import { applyAction } from './shared/reducer.ts';
 import * as net from './network/index.ts';
 
-/**
- * Dispatch a player action.
- *
- * In Stage A this calls the local reducer synchronously. The events the
- * reducer returns are already drained from the buffer; nothing else needs
- * to consume them because the buffer is also auto-flushed via setEventSink
- * (see src/eventApplier.ts).
- *
- * Returns true if the action was accepted, false on rejection (e.g. action
- * not yet wired through the reducer).
- */
 export function dispatch(action: Action): boolean {
-  // Multiplayer mode: forward the intent to the server. The server runs the
-  // reducer and broadcasts events + a fresh state snapshot; the network
-  // module wires those into the eventApplier and a state-replace handler.
-  // We do NOT also run the action locally — that would cause double-mutation
-  // when the snapshot comes back.
-  if (net.getIdentity() !== null && net.isConnected()) {
-    const sent = net.sendAction(action);
-    console.log('[dispatch → server]', action.type, sent ? 'sent' : 'DROPPED');
-    return sent;
-  }
-
-  // Single-player mode (no room). Run the reducer locally; events emitted
-  // during the call are picked up by the microtask sink (eventApplier).
-  console.log('[dispatch local]', action.type);
-  const result = applyAction(action);
-  if (!result.ok) {
-    console.warn('[dispatch local rejected]', action.type, result.error);
+  if (net.getIdentity() === null) {
+    console.warn('[dispatch] not in a room, ignoring', action.type);
     return false;
   }
-  return true;
+  if (!net.isConnected()) {
+    console.warn('[dispatch] socket not open, dropping', action.type);
+    return false;
+  }
+  const sent = net.sendAction(action);
+  if (!sent) console.warn('[dispatch] send returned false for', action.type);
+  return sent;
 }
