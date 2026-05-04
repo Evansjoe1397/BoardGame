@@ -688,7 +688,7 @@ export function activateBuildingUpgrade(buildingId: string): void {
       renderUI();
       return;
     }
-    state.mode = 'building_upgrade_selection';
+    state.mode = 'building_upgrade_status_pick';
     state.pendingUpgradeBuildingId = building.id;
     state.pendingUpgradeStatusId = null;
     state.pendingUpgradeStatusOptions = options;

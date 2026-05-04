@@ -81,7 +81,6 @@ export type GameMode =
   | 'overload_targeting'
   | 'foundation_targeting'
   | 'foundation_confirm'
-  | 'building_upgrade_selection'
   | 'building_upgrade_status_pick'
   | 'harvest_absorb'
   | 'play_card'
