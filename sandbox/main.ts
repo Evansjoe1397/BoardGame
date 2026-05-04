@@ -1271,10 +1271,22 @@ function checkLevelUp(): void {
   // +3 HP per level up (capped at max).
   const before = playerHp;
   playerHp = Math.min(PLAYER_MAX_HP, playerHp + 3);
-  const gained = playerHp - before;
+  const hpGained = playerHp - before;
+  // Instant magazine refill — interrupt any in-progress reload too.
+  let ammoRefilled = false;
+  if (weapon && weapon.ammo < MAG_SIZE) {
+    weapon.ammo = MAG_SIZE;
+    weapon.reloading = false;
+    weapon.primaryTimer = 0;
+    if (weapon.primary === 'reloading') transitionPrimary(weapon, 'idle');
+    updateAmmoHud();
+    ammoRefilled = true;
+  }
   refreshXpHud();
-  levelUpEl.innerHTML = `Level Up!  ${currentLevel}` +
-    (gained > 0 ? `<div style="font-size:22px;color:#aef0a8;margin-top:6px;">+${gained} HP</div>` : '');
+  const lines: string[] = [];
+  if (hpGained > 0)   lines.push(`<div style="font-size:22px;color:#aef0a8;margin-top:6px;">+${hpGained} HP</div>`);
+  if (ammoRefilled)   lines.push(`<div style="font-size:22px;color:#ffd66e;margin-top:2px;">Mag reloaded</div>`);
+  levelUpEl.innerHTML = `Level Up!  ${currentLevel}${lines.join('')}`;
   levelUpEl.style.opacity = '1';
   if (levelUpHideTimer) clearTimeout(levelUpHideTimer);
   levelUpHideTimer = setTimeout(() => { levelUpEl.style.opacity = '0'; }, 1800);
