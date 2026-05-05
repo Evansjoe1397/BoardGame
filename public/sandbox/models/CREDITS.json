@@ -1,0 +1,212 @@
+[
+  {
+    "slug": "tree",
+    "uid": "6a2952e0ebdd41fa93cefda6ae0a4102",
+    "name": "Low Poly Trees Free",
+    "author": "Nicholas-3D",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-6a2952e0ebdd41fa93cefda6ae0a4102",
+    "faceCount": 1616,
+    "bytes": 5465296
+  },
+  {
+    "slug": "rock",
+    "uid": "7c60b4d1b8ab4187965f30c5e0212fc0",
+    "name": "Free Pack - Rocks Stylized",
+    "author": "PolyOne Studio",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-7c60b4d1b8ab4187965f30c5e0212fc0",
+    "faceCount": 3076,
+    "bytes": 1065092
+  },
+  {
+    "slug": "mushroom",
+    "uid": "7262b8835a114d36a8d7e170002479e1",
+    "name": "Stylized Mushroom (4)",
+    "author": "Agata Wilczek",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-7262b8835a114d36a8d7e170002479e1",
+    "faceCount": 802,
+    "bytes": 3145364
+  },
+  {
+    "slug": "crate",
+    "uid": "aaa6d521741944359a6b5a6b67a0bee7",
+    "name": "Rifle Box (Low Poly)",
+    "author": "Berk Gedik",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-aaa6d521741944359a6b5a6b67a0bee7",
+    "faceCount": 928,
+    "bytes": 3080836
+  },
+  {
+    "slug": "barrel",
+    "uid": "e40c858864054c968595ccb15c59384d",
+    "name": "Stylized Basic Props",
+    "author": "Murat Can ÜNAL",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-e40c858864054c968595ccb15c59384d",
+    "faceCount": 1550,
+    "bytes": 8345540
+  },
+  {
+    "slug": "fox",
+    "uid": "01674a892f414c0681afdeb563cc8e13",
+    "name": "Lowpoly fox",
+    "author": "Vlad Zaichyk",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-01674a892f414c0681afdeb563cc8e13",
+    "faceCount": 898,
+    "bytes": 119604
+  },
+  {
+    "slug": "weapon_pistol",
+    "uid": "5f6ec54257de449cacc8c872660b40d3",
+    "name": "Pistol",
+    "author": "DJMaesen",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-5f6ec54257de449cacc8c872660b40d3",
+    "faceCount": 2919,
+    "bytes": 3356148
+  },
+  {
+    "slug": "weapon_rifle",
+    "uid": "849b7cdf8622487485febc40db89e734",
+    "name": "Low-Poly AKM",
+    "author": "TastyTony",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-849b7cdf8622487485febc40db89e734",
+    "faceCount": 6910,
+    "bytes": 959936
+  },
+  {
+    "slug": "weapon_sword",
+    "uid": "ef79d989a32e476884b9c0ed1dc68134",
+    "name": "Celtic Sword",
+    "author": "Urizel",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-ef79d989a32e476884b9c0ed1dc68134",
+    "faceCount": 4344,
+    "bytes": 1985840
+  },
+  {
+    "slug": "weapon_anim",
+    "uid": "26adfd631730494ab0fc80c806eada77",
+    "name": "Colt M1911",
+    "author": "Ole Gunnar Isager",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-26adfd631730494ab0fc80c806eada77",
+    "faceCount": 2059,
+    "bytes": 3659356
+  },
+  {
+    "slug": "asteroid",
+    "uid": "1cf93f26dbc34a08a31367ea8929117f",
+    "name": "Asteroid with minerals",
+    "author": "PeterMikielewicz",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-1cf93f26dbc34a08a31367ea8929117f",
+    "faceCount": 5270,
+    "bytes": 2507984
+  },
+  {
+    "slug": "fps_rifle",
+    "uid": "5f2d0ed780a94724b36ab505f7564057",
+    "name": "Animated FPS hands (rifle animation pack)",
+    "author": "Cransh",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-5f2d0ed780a94724b36ab505f7564057",
+    "faceCount": 26702,
+    "bytes": 14543912
+  },
+  {
+    "slug": "monster",
+    "uid": "ca8cb5485de84c4ea4642240ea8307fc",
+    "name": "Terror Engine - Medusa",
+    "author": "Jazba",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-ca8cb5485de84c4ea4642240ea8307fc",
+    "faceCount": 19904,
+    "bytes": 5136992
+  },
+  {
+    "slug": "flier",
+    "uid": "b3b83f40265347dd90e4666c3e2a843c",
+    "name": "Wyvern",
+    "author": "DibArts",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-b3b83f40265347dd90e4666c3e2a843c",
+    "faceCount": 1154,
+    "bytes": 223472
+  },
+  {
+    "slug": "skydome",
+    "uid": "255203215c394bdb947c718b46515120",
+    "name": "Space nebula HDRI panorama 360 skydome",
+    "author": "Aliaksandr.melas",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-255203215c394bdb947c718b46515120",
+    "faceCount": 960,
+    "bytes": 663996
+  },
+  {
+    "slug": "projectile",
+    "uid": "fea1d82dcd524373b6971a19b2450b07",
+    "name": "astro projectile",
+    "author": "photon (that one larry)",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/none-fea1d82dcd524373b6971a19b2450b07",
+    "faceCount": 18,
+    "bytes": 37720
+  },
+  {
+    "slug": "eyebeast",
+    "uid": "b458af2e4e6f4c61849ad4e1d69e89b1",
+    "name": "Eyebeast - Animated",
+    "author": "nodoxi",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/eyebeast-animated-b458af2e4e6f4c61849ad4e1d69e89b1",
+    "faceCount": 9298,
+    "bytes": 3549640
+  },
+  {
+    "slug": "spider",
+    "uid": "10bb4cf49d304d64afd2b829666f6caf",
+    "name": "Spiderthing take 3",
+    "author": "Rasmus",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/spiderthing-take-3-10bb4cf49d304d64afd2b829666f6caf",
+    "faceCount": 67972,
+    "bytes": 10660104
+  },
+  {
+    "slug": "asteroid_far",
+    "uid": "5446cb4764674e49a5e4eda95ed497dc",
+    "name": "Toutatis asteroid - potential Earth`s impactor",
+    "author": "SebastianSosnowski",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/toutatis-asteroid-potential-earths-impactor-5446cb4764674e49a5e4eda95ed497dc",
+    "faceCount": 11430,
+    "bytes": 2807016
+  },
+  {
+    "slug": "tribrute",
+    "uid": "71cc330a586441d985a95c08bea6a510",
+    "name": "Monster",
+    "author": "Kolbaca",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/monster-71cc330a586441d985a95c08bea6a510",
+    "faceCount": 5802,
+    "bytes": 1348232
+  },
+  {
+    "slug": "bat",
+    "uid": "aaf83921207b4c13b1f30649b5225af5",
+    "name": "Dark Bat",
+    "author": "Kolbaca",
+    "license": "CC Attribution",
+    "source": "https://sketchfab.com/3d-models/dark-bat-aaf83921207b4c13b1f30649b5225af5",
+    "faceCount": 4370,
+    "bytes": 2222248
+  }
+]

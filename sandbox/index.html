@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sandbox · Asteroid FPS</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #000; color: #cfd8e3; font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; }
+
+      #hud {
+        position: fixed; left: 50%; top: 50%; width: 18px; height: 18px;
+        margin: -9px 0 0 -9px; pointer-events: none;
+      }
+      #hud::before, #hud::after {
+        content: ""; position: absolute; background: rgba(255,255,255,0.85);
+      }
+      #hud::before { left: 8px; top: 0; width: 2px; height: 18px; }
+      #hud::after  { left: 0; top: 8px; width: 18px; height: 2px; }
+
+      #overlay {
+        position: fixed; inset: 0; display: grid; place-items: center;
+        background: radial-gradient(circle at center, rgba(20,20,30,0.6), rgba(0,0,0,0.9));
+        z-index: 10;
+      }
+      #overlay .card {
+        background: rgba(15,18,28,0.92); border: 1px solid #2a3447; padding: 22px 26px;
+        border-radius: 8px; max-width: 480px; box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+      }
+      #overlay h1 { margin: 0 0 10px; font-size: 18px; color: #e8edf5; }
+      #overlay p  { margin: 6px 0; }
+      #overlay kbd {
+        background: #2a3344; padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, monospace;
+        border-bottom: 1px solid #1a212e; font-size: 12px;
+      }
+      #overlay button {
+        margin-top: 14px; padding: 8px 16px; font-size: 14px; cursor: pointer;
+        background: #3b6cf2; color: #fff; border: 0; border-radius: 6px;
+      }
+      #overlay button:hover { background: #2f5cd9; }
+
+      #credits {
+        position: fixed; left: 8px; bottom: 8px; max-width: 360px;
+        font-size: 11px; color: #8aa0bd; background: rgba(0,0,0,0.4);
+        padding: 6px 8px; border-radius: 4px; pointer-events: auto;
+      }
+      #credits b { color: #cfd8e3; }
+      #credits a { color: #7aa6ff; text-decoration: none; }
+      #credits a:hover { text-decoration: underline; }
+
+      #info {
+        position: fixed; right: 8px; top: 8px; font-size: 12px;
+        color: #8aa0bd; background: rgba(0,0,0,0.4);
+        padding: 6px 10px; border-radius: 4px;
+      }
+
+      #loader {
+        position: fixed; inset: 0; display: grid; place-items: center;
+        background: #05080f; color: #cfd8e3; z-index: 20;
+        font: 14px/1.4 system-ui, sans-serif; transition: opacity 0.4s ease-out;
+      }
+      #loader .panel { text-align: center; padding: 24px 32px; }
+      #loader .title { font-size: 18px; margin-bottom: 16px; color: #e8edf5; }
+      #loader .step { font-size: 12px; color: #8aa0bd; margin-top: 8px; }
+      #loader .bar  {
+        width: 320px; height: 6px; background: #1a212e;
+        border-radius: 3px; overflow: hidden; margin: 0 auto;
+      }
+      #loader .bar > div {
+        height: 100%; background: linear-gradient(90deg, #3b6cf2, #6a90ff);
+        width: 0%; transition: width 0.2s ease-out;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loader">
+      <div class="panel">
+        <div class="title">Loading sandbox…</div>
+        <div class="bar"><div id="loader-fill"></div></div>
+        <div class="step" id="loader-step">starting</div>
+      </div>
+    </div>
+    <div id="app"></div>
+    <div id="hud"></div>
+    <div id="overlay">
+      <div class="card">
+        <h1>Asteroid Sandbox</h1>
+        <p>Бегаешь по астероиду. Стреляешь по объектам — они разлетаются на полигоны.</p>
+        <p>
+          <kbd>WASD</kbd> — движение&nbsp; · &nbsp;
+          <kbd>Space</kbd> — прыжок&nbsp; · &nbsp;
+          <kbd>Shift</kbd> — спринт<br/>
+          <kbd>Mouse</kbd> — обзор&nbsp; · &nbsp;
+          <kbd>LMB</kbd> — стрелять&nbsp; · &nbsp;
+          <kbd>R</kbd> — перезарядка&nbsp; · &nbsp;
+          <kbd>B</kbd> — небо&nbsp; · &nbsp;
+          <kbd>Esc</kbd> — выход
+        </p>
+        <button id="start">Поехали</button>
+      </div>
+    </div>
+    <div id="credits"></div>
+    <div id="info"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

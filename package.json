@@ -6,9 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "server": "bun run src/server/server.ts",
+    "server:smoketest": "bun run src/server/smoketest.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "docker:build": "docker build -t boardgame:latest .",
+    "docker:run": "docker run --rm -p 8080:8080 boardgame:latest"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.13",
+    "@types/three": "^0.183.1",
+    "typescript": "^6.0.2",
     "vite": "^8.0.1"
   },
   "dependencies": {
